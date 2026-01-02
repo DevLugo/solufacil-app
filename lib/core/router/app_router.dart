@@ -7,6 +7,7 @@ import '../../ui/pages/onboarding_page.dart';
 import '../../ui/pages/login_page.dart';
 import '../../ui/pages/dashboard_page.dart';
 import '../../ui/pages/client_history_page.dart';
+import '../../ui/pages/critical_clients_page.dart';
 import '../../ui/pages/collection/select_location_page.dart';
 import '../../ui/pages/collection/client_list_page.dart';
 import '../../ui/pages/collection/register_payment_page.dart';
@@ -25,6 +26,9 @@ class AppRoutes {
 
   // Create credit wizard
   static const String createCredit = '/create-credit';
+
+  // Critical clients (week 4+ without paying)
+  static const String criticalClients = '/critical-clients';
 
   // Other
   static const String clients = '/clients';
@@ -106,6 +110,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           final loanId = state.uri.queryParameters['loanId'];
           return RegisterPaymentPage(loanId: loanId);
         },
+      ),
+
+      // Critical clients page
+      GoRoute(
+        path: AppRoutes.criticalClients,
+        builder: (context, state) => const CriticalClientsPage(),
       ),
 
       // Clients page (redirects to client history for now)

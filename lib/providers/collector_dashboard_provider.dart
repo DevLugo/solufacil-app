@@ -11,6 +11,37 @@ class RouteModel {
   const RouteModel({required this.id, required this.name});
 }
 
+/// Critical client model - clients in week 4+ without paying
+class CriticalClient {
+  final String loanId;
+  final String borrowerId;
+  final String clientName;
+  final String? clientCode;
+  final String? phone;
+  final double pendingAmount;
+  final double expectedWeeklyPayment;
+  final int weeksWithoutPayment;
+  final DateTime signDate;
+  final DateTime? lastPaymentDate;
+  final String? routeName;
+  final String? leadLocality; // Localidad del líder asociado
+
+  const CriticalClient({
+    required this.loanId,
+    required this.borrowerId,
+    required this.clientName,
+    this.clientCode,
+    this.phone,
+    required this.pendingAmount,
+    required this.expectedWeeklyPayment,
+    required this.weeksWithoutPayment,
+    required this.signDate,
+    this.lastPaymentDate,
+    this.routeName,
+    this.leadLocality,
+  });
+}
+
 /// Selected week state
 class WeekState {
   final DateTime weekStart;
@@ -144,23 +175,23 @@ class CollectorDashboardStats {
   final String? routeName;
 
   // Week comparison
-  final int expectedPaymentsThisWeek; // How many clients should pay this week
-  final int collectedPaymentsThisWeek; // How many actually paid
-  final int missingPaymentsThisWeek; // Expected - Collected
+  final int expectedPaymentsThisWeek;
+  final int collectedPaymentsThisWeek;
+  final int missingPaymentsThisWeek;
   final double collectedAmountThisWeek;
   final double expectedAmountThisWeek;
 
   // Last week comparison
   final int collectedPaymentsLastWeek;
   final double collectedAmountLastWeek;
-  final int comparisonVsLastWeek; // Difference in count
+  final int comparisonVsLastWeek;
   final double comparisonAmountVsLastWeek;
 
   // Goal progress
-  final double goalProgress; // % of expected collected
+  final double goalProgress;
   final bool isAheadOfLastWeek;
 
-  // Portfolio (active loans only - PortfolioCleanup concept)
+  // Portfolio
   final int activeLoansCount;
   final double totalPendingDebt;
   final double totalCollected;
@@ -168,6 +199,20 @@ class CollectorDashboardStats {
   // New loans this week
   final int newLoansThisWeek;
   final double newLoansAmountThisWeek;
+
+  // Portfolio movement (credits delta)
+  final int renewedLoansThisWeek;    // Loans renewed this week
+  final int finishedLoansThisWeek;   // Loans finished this week
+  final int portfolioBalance;         // nuevos - finalizados (net change)
+
+  // Critical clients (CV) breakdown
+  final int clientsAlCorriente;  // Paid this week
+  final int clientsWeek1CV;      // 1 week without paying
+  final int clientsWeek2CV;      // 2 weeks without paying
+  final int clientsWeek3CV;      // 3 weeks without paying
+  final int clientsWeek4CV;      // 4 weeks - CRITICAL!
+  final int clientsWeek5PlusCV;  // 5+ weeks - VERY CRITICAL!
+  final List<CriticalClient> criticalClientsList;
 
   // User info
   final String userName;
@@ -191,6 +236,16 @@ class CollectorDashboardStats {
     required this.totalCollected,
     required this.newLoansThisWeek,
     required this.newLoansAmountThisWeek,
+    required this.renewedLoansThisWeek,
+    required this.finishedLoansThisWeek,
+    required this.portfolioBalance,
+    required this.clientsAlCorriente,
+    required this.clientsWeek1CV,
+    required this.clientsWeek2CV,
+    required this.clientsWeek3CV,
+    required this.clientsWeek4CV,
+    required this.clientsWeek5PlusCV,
+    required this.criticalClientsList,
     required this.userName,
     required this.isOnline,
   });
@@ -213,6 +268,16 @@ class CollectorDashboardStats {
         totalCollected: 0,
         newLoansThisWeek: 0,
         newLoansAmountThisWeek: 0,
+        renewedLoansThisWeek: 0,
+        finishedLoansThisWeek: 0,
+        portfolioBalance: 0,
+        clientsAlCorriente: 0,
+        clientsWeek1CV: 0,
+        clientsWeek2CV: 0,
+        clientsWeek3CV: 0,
+        clientsWeek4CV: 0,
+        clientsWeek5PlusCV: 0,
+        criticalClientsList: [],
         userName: 'Usuario',
         isOnline: false,
       );
@@ -240,14 +305,8 @@ final collectorDashboardStatsProvider =
   final lastWeekEndStr =
       weekState.weekEnd.subtract(const Duration(days: 7)).toIso8601String().split('T')[0];
 
-  // Route filter clause
-  final routeFilter = selectedRoute != null
-      ? "AND snapshotRouteId = '${selectedRoute.id}'"
-      : '';
-
   try {
-    // Build renewal map: Get all loan IDs that have been renewed
-    // (i.e., another loan exists with previousLoan = this.id)
+    // Build renewal map
     final renewedLoansResult = await db.execute('''
       SELECT DISTINCT previousLoan as renewedLoanId
       FROM Loan
@@ -262,43 +321,77 @@ final collectorDashboardStatsProvider =
       }
     }
 
-    // Query 1: Get all loans active during the selected week
-    // Matching API's getRouteKPIs historical logic:
-    // - signDate <= weekEnd (signed before or during this week)
-    // - excludedByCleanup IS NULL
-    // - finishedDate IS NULL OR finishedDate >= weekStart (not finished before this week)
-    // - renewedDate IS NULL OR renewedDate >= weekStart (not renewed before this week)
-    // Then in Dart: check stillActiveAtWeekEnd (finishedDate/renewedDate IS NULL OR > weekEnd)
-
-    final potentialLoansResult = await db.execute('''
+    // Query all active loans with full details for CV analysis
+    final loansResult = await db.execute('''
       SELECT
-        id,
-        pendingAmountStored,
-        totalPaid,
-        totalDebtAcquired,
-        expectedWeeklyPayment,
-        signDate,
-        finishedDate,
-        renewedDate,
-        previousLoan
-      FROM Loan
-      WHERE (excludedByCleanup IS NULL OR excludedByCleanup = '')
-        AND signDate <= ?
-        AND (finishedDate IS NULL OR finishedDate = '' OR finishedDate >= ?)
-        AND (renewedDate IS NULL OR renewedDate = '' OR renewedDate >= ?)
-        ${selectedRoute != null ? "AND snapshotRouteId = '${selectedRoute.id}'" : ''}
+        l.id,
+        l.borrower,
+        l.pendingAmountStored,
+        l.totalPaid,
+        l.totalDebtAcquired,
+        l.expectedWeeklyPayment,
+        l.signDate,
+        l.finishedDate,
+        l.renewedDate,
+        l.previousLoan,
+        l.snapshotRouteName,
+        l.snapshotRouteId,
+        l.snapshotLeadId,
+        b.personalData as personalDataId,
+        pd.fullName as clientName,
+        pd.clientCode,
+        (SELECT phone FROM Phone WHERE personalData = pd.id LIMIT 1) as phone,
+        (SELECT name FROM Route WHERE id = l.snapshotRouteId LIMIT 1) as routeNameFromTable,
+        (SELECT loc.name
+         FROM Employee emp
+         JOIN Address a ON a.personalData = emp.personalData
+         JOIN Location loc ON a.location = loc.id
+         WHERE emp.id = l.lead OR emp.id = l.snapshotLeadId
+         LIMIT 1) as leadLocality
+      FROM Loan l
+      LEFT JOIN Borrower b ON l.borrower = b.id
+      LEFT JOIN PersonalData pd ON b.personalData = pd.id
+      WHERE (l.excludedByCleanup IS NULL OR l.excludedByCleanup = '')
+        AND l.signDate <= ?
+        AND (l.finishedDate IS NULL OR l.finishedDate = '' OR l.finishedDate >= ?)
+        AND (l.renewedDate IS NULL OR l.renewedDate = '' OR l.renewedDate >= ?)
+        ${selectedRoute != null ? "AND l.snapshotRouteId = '${selectedRoute.id}'" : ''}
     ''', [weekEndStr, weekStartStr, weekStartStr]);
 
-    // Filter loans matching API's isLoanConsideredOnDate logic:
-    // 1. stillActiveAtWeekEnd (finishedDate/renewedDate IS NULL OR > weekEnd)
-    // 2. realPendingAmount > 0 (totalDebt - totalPaid)
-    // 3. Only check renewalMap for loans with previousLoan
+    // Get all payments for analysis
+    final paymentsResult = await db.execute('''
+      SELECT loan, receivedAt, amount
+      FROM LoanPayment
+      ORDER BY receivedAt DESC
+    ''');
+
+    // Build payments map per loan
+    final paymentsMap = <String, List<Map<String, dynamic>>>{};
+    for (final row in paymentsResult) {
+      final loanId = row['loan'] as String?;
+      if (loanId != null) {
+        paymentsMap.putIfAbsent(loanId, () => []);
+        paymentsMap[loanId]!.add(row);
+      }
+    }
+
+    // Process loans
     int activeLoansCount = 0;
     double totalPendingDebt = 0;
     double totalCollected = 0;
     double expectedWeeklyTotal = 0;
 
-    for (final row in potentialLoansResult) {
+    int clientsAlCorriente = 0;
+    int clientsWeek1CV = 0;
+    int clientsWeek2CV = 0;
+    int clientsWeek3CV = 0;
+    int clientsWeek4CV = 0;
+    int clientsWeek5PlusCV = 0;
+    final criticalClientsList = <CriticalClient>[];
+
+    final paidLoansThisWeek = <String>{};
+
+    for (final row in loansResult) {
       final loanId = row['id'] as String?;
       final finishedDateStr = row['finishedDate'] as String?;
       final renewedDateStr = row['renewedDate'] as String?;
@@ -306,66 +399,158 @@ final collectorDashboardStatsProvider =
       final totalPaid = (row['totalPaid'] as num?)?.toDouble() ?? 0;
       final totalDebt = (row['totalDebtAcquired'] as num?)?.toDouble() ?? 0;
       final pendingStored = (row['pendingAmountStored'] as num?)?.toDouble() ?? 0;
+      final signDateStr = row['signDate'] as String?;
+      final expectedWeekly = (row['expectedWeeklyPayment'] as num?)?.toDouble() ?? 0;
 
-      // Check if still active at week end (matching API's stillActiveAtWeekEnd logic)
+      // Check if still active at week end
       final finishedAfterWeekEnd = finishedDateStr == null || finishedDateStr.isEmpty || finishedDateStr.compareTo(weekEndStr) > 0;
       final renewedAfterWeekEnd = renewedDateStr == null || renewedDateStr.isEmpty || renewedDateStr.compareTo(weekEndStr) > 0;
       final stillActiveAtWeekEnd = finishedAfterWeekEnd && renewedAfterWeekEnd;
 
-      // Calculate real pending amount (matching API's isLoanConsideredOnDate)
+      // Calculate real pending amount
       final realPendingAmount = totalDebt > 0 ? (totalDebt - totalPaid) : pendingStored;
 
-      // Only check renewedLoanIds for loans with previousLoan (matching API logic)
+      // Check renewal
       final hasNewerRenewal = (previousLoan != null && previousLoan.isNotEmpty)
           ? renewedLoanIds.contains(loanId)
           : false;
 
-      if (loanId != null && stillActiveAtWeekEnd && realPendingAmount > 0 && !hasNewerRenewal) {
-        activeLoansCount++;
-        totalPendingDebt += pendingStored;
-        totalCollected += totalPaid;
-        expectedWeeklyTotal += (row['expectedWeeklyPayment'] as num?)?.toDouble() ?? 0;
+      if (loanId == null || !stillActiveAtWeekEnd || realPendingAmount <= 0 || hasNewerRenewal) {
+        continue;
+      }
+
+      activeLoansCount++;
+      totalPendingDebt += pendingStored;
+      totalCollected += totalPaid;
+      expectedWeeklyTotal += expectedWeekly;
+
+      // Calculate weeks without payment
+      final loanPayments = paymentsMap[loanId] ?? [];
+
+      // Check if paid this week
+      bool paidThisWeek = false;
+      DateTime? lastPaymentDate;
+
+      for (final payment in loanPayments) {
+        final receivedAt = payment['receivedAt'] as String?;
+        if (receivedAt != null) {
+          final paymentDate = receivedAt.split('T')[0];
+          if (lastPaymentDate == null) {
+            lastPaymentDate = DateTime.tryParse(receivedAt);
+          }
+          if (paymentDate.compareTo(weekStartStr) >= 0 && paymentDate.compareTo(weekEndStr) <= 0) {
+            paidThisWeek = true;
+            paidLoansThisWeek.add(loanId);
+            break;
+          }
+        }
+      }
+
+      if (paidThisWeek) {
+        clientsAlCorriente++;
+      } else {
+        // Calculate weeks since last payment or sign date
+        final signDate = DateTime.tryParse(signDateStr ?? '');
+        final referenceDate = lastPaymentDate ?? signDate;
+
+        if (referenceDate != null) {
+          final weeksSincePayment = weekState.weekStart.difference(referenceDate).inDays ~/ 7;
+
+          // Categorize by CV weeks (only count if signed before this week - not in grace period)
+          final signedBeforeThisWeek = signDate != null &&
+              signDate.isBefore(weekState.weekStart.subtract(const Duration(days: 6)));
+
+          if (signedBeforeThisWeek) {
+            // Get route name - prefer snapshotRouteName, fallback to Route table
+            final snapshotRouteName = row['snapshotRouteName'] as String?;
+            final routeNameFromTable = row['routeNameFromTable'] as String?;
+            final effectiveRouteName = (snapshotRouteName != null && snapshotRouteName.isNotEmpty)
+                ? snapshotRouteName
+                : routeNameFromTable;
+            final leadLocality = row['leadLocality'] as String?;
+
+            if (weeksSincePayment >= 5) {
+              clientsWeek5PlusCV++;
+              // Add to critical list (very critical)
+              criticalClientsList.add(CriticalClient(
+                loanId: loanId,
+                borrowerId: row['borrower'] as String? ?? '',
+                clientName: row['clientName'] as String? ?? 'Sin nombre',
+                clientCode: row['clientCode'] as String?,
+                phone: row['phone'] as String?,
+                pendingAmount: pendingStored,
+                expectedWeeklyPayment: expectedWeekly,
+                weeksWithoutPayment: weeksSincePayment,
+                signDate: signDate,
+                lastPaymentDate: lastPaymentDate,
+                routeName: effectiveRouteName,
+                leadLocality: leadLocality,
+              ));
+            } else if (weeksSincePayment == 4) {
+              clientsWeek4CV++;
+              // Add to critical list
+              criticalClientsList.add(CriticalClient(
+                loanId: loanId,
+                borrowerId: row['borrower'] as String? ?? '',
+                clientName: row['clientName'] as String? ?? 'Sin nombre',
+                clientCode: row['clientCode'] as String?,
+                phone: row['phone'] as String?,
+                pendingAmount: pendingStored,
+                expectedWeeklyPayment: expectedWeekly,
+                weeksWithoutPayment: weeksSincePayment,
+                signDate: signDate,
+                lastPaymentDate: lastPaymentDate,
+                routeName: effectiveRouteName,
+                leadLocality: leadLocality,
+              ));
+            } else if (weeksSincePayment == 3) {
+              clientsWeek3CV++;
+            } else if (weeksSincePayment == 2) {
+              clientsWeek2CV++;
+            } else if (weeksSincePayment == 1) {
+              clientsWeek1CV++;
+            } else {
+              // First week after sign, in grace or just started
+              clientsAlCorriente++;
+            }
+          } else {
+            // In grace period (just signed)
+            clientsAlCorriente++;
+          }
+        }
       }
     }
 
-    // Query 2: Payments collected this week (filtering out renewed loans)
-    // Matching API's buildActiveLoansWhereClause logic exactly
+    // Sort critical clients by weeks without payment (most critical first)
+    criticalClientsList.sort((a, b) => b.weeksWithoutPayment.compareTo(a.weeksWithoutPayment));
+
+    // Query payments this week (for amount calculation)
     final paymentsThisWeekResult = await db.execute('''
-      SELECT
-        lp.loan as loanId,
-        lp.amount
+      SELECT lp.loan as loanId, lp.amount
       FROM LoanPayment lp
       INNER JOIN Loan l ON lp.loan = l.id
       WHERE lp.receivedAt >= ? AND lp.receivedAt <= ?
-        AND l.pendingAmountStored > 0
         AND (l.excludedByCleanup IS NULL OR l.excludedByCleanup = '')
         AND (l.finishedDate IS NULL OR l.finishedDate = '')
         AND (l.renewedDate IS NULL OR l.renewedDate = '')
         ${selectedRoute != null ? "AND l.snapshotRouteId = '${selectedRoute.id}'" : ''}
     ''', [weekStartStr, weekEndStr + 'T23:59:59']);
 
-    final paidLoansThisWeek = <String>{};
     double collectedAmountThisWeek = 0;
-
     for (final row in paymentsThisWeekResult) {
       final loanId = row['loanId'] as String?;
       if (loanId != null && !renewedLoanIds.contains(loanId)) {
-        paidLoansThisWeek.add(loanId);
         collectedAmountThisWeek += (row['amount'] as num?)?.toDouble() ?? 0;
       }
     }
     final collectedPaymentsThisWeek = paidLoansThisWeek.length;
 
-    // Query 3: Payments collected last week (for comparison)
-    // Matching API's buildActiveLoansWhereClause logic exactly
+    // Query payments last week
     final paymentsLastWeekResult = await db.execute('''
-      SELECT
-        lp.loan as loanId,
-        lp.amount
+      SELECT lp.loan as loanId, lp.amount
       FROM LoanPayment lp
       INNER JOIN Loan l ON lp.loan = l.id
       WHERE lp.receivedAt >= ? AND lp.receivedAt <= ?
-        AND l.pendingAmountStored > 0
         AND (l.excludedByCleanup IS NULL OR l.excludedByCleanup = '')
         AND (l.finishedDate IS NULL OR l.finishedDate = '')
         AND (l.renewedDate IS NULL OR l.renewedDate = '')
@@ -374,7 +559,6 @@ final collectorDashboardStatsProvider =
 
     final paidLoansLastWeek = <String>{};
     double collectedAmountLastWeek = 0;
-
     for (final row in paymentsLastWeekResult) {
       final loanId = row['loanId'] as String?;
       if (loanId != null && !renewedLoanIds.contains(loanId)) {
@@ -384,27 +568,56 @@ final collectorDashboardStatsProvider =
     }
     final collectedPaymentsLastWeek = paidLoansLastWeek.length;
 
-    // Query 4: New loans this week
+    // Query new loans this week
     final newLoansResult = await db.execute('''
-      SELECT
-        COUNT(*) as count,
-        COALESCE(SUM(requestedAmount), 0) as amount
+      SELECT COUNT(*) as count, COALESCE(SUM(requestedAmount), 0) as amount
       FROM Loan
       WHERE signDate >= ? AND signDate <= ?
-        $routeFilter
+        AND (previousLoan IS NULL OR previousLoan = '')
+        ${selectedRoute != null ? "AND snapshotRouteId = '${selectedRoute.id}'" : ''}
     ''', [weekStartStr, weekEndStr]);
 
     int newLoansThisWeek = 0;
     double newLoansAmountThisWeek = 0;
-
     if (newLoansResult.isNotEmpty) {
       final row = newLoansResult.first;
       newLoansThisWeek = (row['count'] as num?)?.toInt() ?? 0;
       newLoansAmountThisWeek = (row['amount'] as num?)?.toDouble() ?? 0;
     }
 
+    // Query renewed loans this week (loans that have a previousLoan and were signed this week)
+    final renewedLoansWeekResult = await db.execute('''
+      SELECT COUNT(*) as count
+      FROM Loan
+      WHERE signDate >= ? AND signDate <= ?
+        AND previousLoan IS NOT NULL AND previousLoan != ''
+        ${selectedRoute != null ? "AND snapshotRouteId = '${selectedRoute.id}'" : ''}
+    ''', [weekStartStr, weekEndStr]);
+
+    int renewedLoansThisWeek = 0;
+    if (renewedLoansWeekResult.isNotEmpty) {
+      renewedLoansThisWeek = (renewedLoansWeekResult.first['count'] as num?)?.toInt() ?? 0;
+    }
+
+    // Query finished loans this week (loans that have finishedDate in this week)
+    final finishedLoansResult = await db.execute('''
+      SELECT COUNT(*) as count
+      FROM Loan
+      WHERE finishedDate >= ? AND finishedDate <= ?
+        AND (excludedByCleanup IS NULL OR excludedByCleanup = '')
+        ${selectedRoute != null ? "AND snapshotRouteId = '${selectedRoute.id}'" : ''}
+    ''', [weekStartStr, weekEndStr + 'T23:59:59']);
+
+    int finishedLoansThisWeek = 0;
+    if (finishedLoansResult.isNotEmpty) {
+      finishedLoansThisWeek = (finishedLoansResult.first['count'] as num?)?.toInt() ?? 0;
+    }
+
+    // Portfolio balance: nuevos - finalizados (net change in active clients)
+    final portfolioBalance = newLoansThisWeek - finishedLoansThisWeek;
+
     // Calculate metrics
-    final expectedPaymentsThisWeek = activeLoansCount; // Each active loan expects 1 payment per week
+    final expectedPaymentsThisWeek = activeLoansCount;
     final missingPaymentsThisWeek = (expectedPaymentsThisWeek - collectedPaymentsThisWeek).clamp(0, expectedPaymentsThisWeek);
     final expectedAmountThisWeek = expectedWeeklyTotal;
 
@@ -434,6 +647,16 @@ final collectorDashboardStatsProvider =
       totalCollected: totalCollected,
       newLoansThisWeek: newLoansThisWeek,
       newLoansAmountThisWeek: newLoansAmountThisWeek,
+      renewedLoansThisWeek: renewedLoansThisWeek,
+      finishedLoansThisWeek: finishedLoansThisWeek,
+      portfolioBalance: portfolioBalance,
+      clientsAlCorriente: clientsAlCorriente,
+      clientsWeek1CV: clientsWeek1CV,
+      clientsWeek2CV: clientsWeek2CV,
+      clientsWeek3CV: clientsWeek3CV,
+      clientsWeek4CV: clientsWeek4CV,
+      clientsWeek5PlusCV: clientsWeek5PlusCV,
+      criticalClientsList: criticalClientsList,
       userName: userName,
       isOnline: !isSyncing,
     );
@@ -456,6 +679,16 @@ final collectorDashboardStatsProvider =
       totalCollected: 0,
       newLoansThisWeek: 0,
       newLoansAmountThisWeek: 0,
+      renewedLoansThisWeek: 0,
+      finishedLoansThisWeek: 0,
+      portfolioBalance: 0,
+      clientsAlCorriente: 0,
+      clientsWeek1CV: 0,
+      clientsWeek2CV: 0,
+      clientsWeek3CV: 0,
+      clientsWeek4CV: 0,
+      clientsWeek5PlusCV: 0,
+      criticalClientsList: [],
       userName: userName,
       isOnline: !isSyncing,
     );

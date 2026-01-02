@@ -103,6 +103,16 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           ),
           const SizedBox(height: 16),
 
+          // CRITICAL ALERT - Show if there are week 4+ clients
+          if (stats.clientsWeek4CV + stats.clientsWeek5PlusCV > 0) ...[
+            _CriticalAlertCard(
+              week4Count: stats.clientsWeek4CV,
+              week5PlusCount: stats.clientsWeek5PlusCV,
+              onTap: () => context.push(AppRoutes.criticalClients),
+            ),
+            const SizedBox(height: 16),
+          ],
+
           // Main Collection Progress
           _CollectionProgressCard(
             collected: stats.collectedPaymentsThisWeek,
@@ -110,6 +120,21 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             missing: stats.missingPaymentsThisWeek,
             progress: stats.goalProgress,
             isLoading: isLoading,
+          ),
+          const SizedBox(height: 16),
+
+          // CV Breakdown Card
+          _CVBreakdownCard(
+            alCorriente: stats.clientsAlCorriente,
+            week1: stats.clientsWeek1CV,
+            week2: stats.clientsWeek2CV,
+            week3: stats.clientsWeek3CV,
+            week4: stats.clientsWeek4CV,
+            week5Plus: stats.clientsWeek5PlusCV,
+            total: stats.activeLoansCount,
+            onCriticalTap: (stats.clientsWeek4CV + stats.clientsWeek5PlusCV) > 0
+                ? () => context.push(AppRoutes.criticalClients)
+                : null,
           ),
           const SizedBox(height: 16),
 
@@ -139,6 +164,16 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           ),
           const SizedBox(height: 16),
 
+          // Portfolio Movement Card (Credits Delta)
+          _PortfolioMovementCard(
+            newLoans: stats.newLoansThisWeek,
+            renewed: stats.renewedLoansThisWeek,
+            finished: stats.finishedLoansThisWeek,
+            balance: stats.portfolioBalance,
+            newLoansAmount: _currencyFormat.format(stats.newLoansAmountThisWeek),
+          ),
+          const SizedBox(height: 16),
+
           // Comparison with last week
           _ComparisonCard(
             collectedThisWeek: stats.collectedPaymentsThisWeek,
@@ -157,15 +192,13 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           _PortfolioCard(
             activeLoans: stats.activeLoansCount,
             pendingDebt: _currencyFormat.format(stats.totalPendingDebt),
-            newLoansThisWeek: stats.newLoansThisWeek,
-            newLoansAmount: _currencyFormat.format(stats.newLoansAmountThisWeek),
             isLoading: isLoading,
           ),
           const SizedBox(height: 24),
 
           // Quick Actions
           Text(
-            'Acciones Rápidas',
+            'Acciones Rapidas',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -196,6 +229,574 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         context.push(AppRoutes.reports);
         break;
     }
+  }
+}
+
+/// Critical Alert Card - Shows when there are clients in week 4+
+class _CriticalAlertCard extends StatelessWidget {
+  final int week4Count;
+  final int week5PlusCount;
+  final VoidCallback onTap;
+
+  const _CriticalAlertCard({
+    required this.week4Count,
+    required this.week5PlusCount,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final totalCritical = week4Count + week5PlusCount;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              week5PlusCount > 0 ? const Color(0xFF7C2D12) : AppColors.error,
+              AppColors.error,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.error.withOpacity(0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                LucideIcons.alertTriangle,
+                size: 28,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'CLIENTES CRITICOS',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white70,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$totalCritical clientes criticos',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      if (week4Count > 0) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Sem 4: $week4Count',
+                            style: const TextStyle(fontSize: 11, color: Colors.white),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      if (week5PlusCount > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Sem 5+: $week5PlusCount',
+                            style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                LucideIcons.chevronRight,
+                size: 24,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// CV Breakdown Card - Shows clients by payment status
+class _CVBreakdownCard extends StatelessWidget {
+  final int alCorriente;
+  final int week1;
+  final int week2;
+  final int week3;
+  final int week4;
+  final int week5Plus;
+  final int total;
+  final VoidCallback? onCriticalTap;
+
+  const _CVBreakdownCard({
+    required this.alCorriente,
+    required this.week1,
+    required this.week2,
+    required this.week3,
+    required this.week4,
+    required this.week5Plus,
+    required this.total,
+    this.onCriticalTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasCritical = week4 + week5Plus > 0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        boxShadow: AppTheme.shadowCard,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(LucideIcons.pieChart, size: 16, color: AppColors.textSecondary),
+              const SizedBox(width: 6),
+              Text(
+                'Estado de Cartera',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.secondary,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '$total activos',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textMuted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Progress bar showing breakdown
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: SizedBox(
+              height: 12,
+              child: Row(
+                children: [
+                  if (alCorriente > 0)
+                    Expanded(
+                      flex: alCorriente,
+                      child: Container(color: AppColors.success),
+                    ),
+                  if (week1 > 0)
+                    Expanded(
+                      flex: week1,
+                      child: Container(color: const Color(0xFFFBBF24)), // Yellow
+                    ),
+                  if (week2 > 0)
+                    Expanded(
+                      flex: week2,
+                      child: Container(color: const Color(0xFFF59E0B)), // Amber
+                    ),
+                  if (week3 > 0)
+                    Expanded(
+                      flex: week3,
+                      child: Container(color: const Color(0xFFEA580C)), // Orange
+                    ),
+                  if (week4 > 0)
+                    Expanded(
+                      flex: week4,
+                      child: Container(color: AppColors.error), // Red
+                    ),
+                  if (week5Plus > 0)
+                    Expanded(
+                      flex: week5Plus,
+                      child: Container(color: const Color(0xFF7C2D12)), // Dark red
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Legend with counts
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _CVLegendItem(
+                color: AppColors.success,
+                label: 'Al corriente',
+                count: alCorriente,
+              ),
+              _CVLegendItem(
+                color: const Color(0xFFFBBF24),
+                label: 'Sem 1',
+                count: week1,
+              ),
+              _CVLegendItem(
+                color: const Color(0xFFF59E0B),
+                label: 'Sem 2',
+                count: week2,
+              ),
+              _CVLegendItem(
+                color: const Color(0xFFEA580C),
+                label: 'Sem 3',
+                count: week3,
+              ),
+              // Week 4 - Critical
+              GestureDetector(
+                onTap: onCriticalTap,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: week4 > 0 ? AppColors.error.withOpacity(0.1) : null,
+                    borderRadius: BorderRadius.circular(6),
+                    border: week4 > 0 ? Border.all(color: AppColors.error.withOpacity(0.3)) : null,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: AppColors.error,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Sem 4',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: week4 > 0 ? AppColors.error : AppColors.textMuted,
+                          fontWeight: week4 > 0 ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$week4',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: week4 > 0 ? AppColors.error : AppColors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Week 5+ - Very Critical
+              GestureDetector(
+                onTap: onCriticalTap,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: week5Plus > 0 ? const Color(0xFF7C2D12).withOpacity(0.15) : null,
+                    borderRadius: BorderRadius.circular(6),
+                    border: week5Plus > 0 ? Border.all(color: const Color(0xFF7C2D12).withOpacity(0.4)) : null,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF7C2D12),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Sem 5+',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: week5Plus > 0 ? const Color(0xFF7C2D12) : AppColors.textMuted,
+                          fontWeight: week5Plus > 0 ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$week5Plus',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: week5Plus > 0 ? const Color(0xFF7C2D12) : AppColors.textMuted,
+                        ),
+                      ),
+                      if (hasCritical) ...[
+                        const SizedBox(width: 4),
+                        Icon(
+                          LucideIcons.chevronRight,
+                          size: 12,
+                          color: week5Plus > 0 ? const Color(0xFF7C2D12) : AppColors.error,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CVLegendItem extends StatelessWidget {
+  final Color color;
+  final String label;
+  final int count;
+
+  const _CVLegendItem({
+    required this.color,
+    required this.label,
+    required this.count,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: AppColors.textMuted,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          '$count',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: AppColors.secondary,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Portfolio Movement Card - Shows credits delta
+class _PortfolioMovementCard extends StatelessWidget {
+  final int newLoans;
+  final int renewed;
+  final int finished;
+  final int balance;
+  final String newLoansAmount;
+
+  const _PortfolioMovementCard({
+    required this.newLoans,
+    required this.renewed,
+    required this.finished,
+    required this.balance,
+    required this.newLoansAmount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isPositive = balance >= 0;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        boxShadow: AppTheme.shadowCard,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(LucideIcons.activity, size: 16, color: AppColors.textSecondary),
+              const SizedBox(width: 6),
+              Text(
+                'Movimiento de Cartera',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.secondary,
+                ),
+              ),
+              const Spacer(),
+              // Balance badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: (isPositive ? AppColors.success : AppColors.error).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isPositive ? LucideIcons.trendingUp : LucideIcons.trendingDown,
+                      size: 14,
+                      color: isPositive ? AppColors.success : AppColors.error,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${balance >= 0 ? '+' : ''}$balance',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: isPositive ? AppColors.success : AppColors.error,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              // Nuevos
+              Expanded(
+                child: _MovementItem(
+                  icon: LucideIcons.userPlus,
+                  label: 'Nuevos',
+                  value: '$newLoans',
+                  subValue: newLoansAmount,
+                  color: AppColors.success,
+                ),
+              ),
+              Container(width: 1, height: 50, color: AppColors.border),
+              // Renovados
+              Expanded(
+                child: _MovementItem(
+                  icon: LucideIcons.refreshCw,
+                  label: 'Renovados',
+                  value: '$renewed',
+                  color: AppColors.info,
+                ),
+              ),
+              Container(width: 1, height: 50, color: AppColors.border),
+              // Finalizados
+              Expanded(
+                child: _MovementItem(
+                  icon: LucideIcons.userMinus,
+                  label: 'Finalizados',
+                  value: '$finished',
+                  color: AppColors.textMuted,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MovementItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final String? subValue;
+  final Color color;
+
+  const _MovementItem({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.subValue,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Column(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              color: AppColors.textMuted,
+            ),
+          ),
+          if (subValue != null)
+            Text(
+              subValue!,
+              style: TextStyle(
+                fontSize: 10,
+                color: color.withOpacity(0.8),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 
@@ -275,9 +876,9 @@ class _HeaderSection extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Cerrar Sesión'),
+        title: const Text('Cerrar Sesion'),
         content: const Text(
-          '¿Deseas cerrar sesión? Esto limpiará los datos locales y forzará una nueva sincronización al volver a iniciar sesión.',
+          'Deseas cerrar sesion? Esto limpiara los datos locales y forzara una nueva sincronizacion al volver a iniciar sesion.',
         ),
         actions: [
           TextButton(
@@ -292,7 +893,7 @@ class _HeaderSection extends StatelessWidget {
             style: TextButton.styleFrom(
               foregroundColor: AppColors.error,
             ),
-            child: const Text('Cerrar Sesión'),
+            child: const Text('Cerrar Sesion'),
           ),
         ],
       ),
@@ -939,15 +1540,11 @@ class _ComparisonCard extends StatelessWidget {
 class _PortfolioCard extends StatelessWidget {
   final int activeLoans;
   final String pendingDebt;
-  final int newLoansThisWeek;
-  final String newLoansAmount;
   final bool isLoading;
 
   const _PortfolioCard({
     required this.activeLoans,
     required this.pendingDebt,
-    required this.newLoansThisWeek,
-    required this.newLoansAmount,
     this.isLoading = false,
   });
 
@@ -983,7 +1580,7 @@ class _PortfolioCard extends StatelessWidget {
               Expanded(
                 child: _PortfolioStat(
                   value: '$activeLoans',
-                  label: 'Créditos activos',
+                  label: 'Creditos activos',
                   icon: LucideIcons.users,
                   color: AppColors.primary,
                 ),
@@ -999,39 +1596,6 @@ class _PortfolioCard extends StatelessWidget {
               ),
             ],
           ),
-          if (newLoansThisWeek > 0) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.success.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(LucideIcons.plus, size: 14, color: AppColors.success),
-                  const SizedBox(width: 6),
-                  Text(
-                    '$newLoansThisWeek nuevos esta semana',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.success,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    newLoansAmount,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.success,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -1097,7 +1661,7 @@ class _QuickActionsGrid extends StatelessWidget {
       children: [
         _QuickActionButton(
           icon: LucideIcons.plus,
-          label: 'Nuevo Crédito',
+          label: 'Nuevo Credito',
           iconBgColor: AppColors.primary.withOpacity(0.1),
           iconColor: AppColors.primary,
           onTap: () => context.push(AppRoutes.createCredit),

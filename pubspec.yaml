@@ -45,6 +45,7 @@ dependencies:
   equatable: ^2.0.5
   uuid: ^4.2.2
   decimal: ^2.3.3
+  url_launcher: ^6.2.2
 
   # Icons
   cupertino_icons: ^1.0.6
