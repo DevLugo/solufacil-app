@@ -120,46 +120,124 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   Widget build(BuildContext context) {
     final statsAsync = ref.watch(collectorDashboardStatsProvider);
     final weekState = ref.watch(weekStateProvider);
+    final dayState = ref.watch(dayStateProvider);
     final routesAsync = ref.watch(routesProvider);
     final selectedRoute = ref.watch(selectedRouteProvider);
+    final selectedLead = ref.watch(selectedLeadProvider);  // Localidad
     final isSyncing = ref.watch(isSyncingProvider);
     final isDarkMode = ref.watch(dashboardThemeModeProvider);
     final colors = isDarkMode ? DashboardColors.dark : DashboardColors.light;
 
+    // Work mode requires a LOCALITY (Lead) to be selected, not just a route
+    final isWorkMode = selectedLead != null;
+
     return Scaffold(
       backgroundColor: colors.scaffoldBackground,
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () async {
-            await triggerSync(ref);
-            ref.invalidate(collectorDashboardStatsProvider);
-          },
-          color: AppColors.primary,
-          child: statsAsync.when(
-            data: (stats) => _buildContent(stats, weekState, routesAsync, selectedRoute, false, colors, isDarkMode),
-            loading: () => _buildContent(CollectorDashboardStats.empty(), weekState, routesAsync, selectedRoute, true, colors, isDarkMode),
-            error: (_, __) => _buildContent(CollectorDashboardStats.empty(), weekState, routesAsync, selectedRoute, false, colors, isDarkMode),
-          ),
+        child: Column(
+          children: [
+            // Work Mode Header Banner - shows when locality is selected
+            if (isWorkMode)
+              _WorkModeHeader(
+                leadName: selectedLead.name,
+                locationName: selectedLead.locationName,
+                onExit: () {
+                  ref.read(selectedLeadProvider.notifier).state = null;
+                  ref.read(dayStateProvider.notifier).goToToday();
+                  setState(() => _currentIndex = 0);
+                },
+                onChangeLead: () => context.push(AppRoutes.jornada),
+              ),
+            // Main content
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () async {
+                  await triggerSync(ref);
+                  ref.invalidate(collectorDashboardStatsProvider);
+                },
+                color: AppColors.primary,
+                child: statsAsync.when(
+                  data: (stats) => isWorkMode
+                      ? _buildWorkModeContent(stats, dayState, false, colors, isDarkMode)
+                      : _buildRouteModeContent(stats, weekState, routesAsync, selectedRoute, false, colors, isDarkMode),
+                  loading: () => isWorkMode
+                      ? _buildWorkModeContent(CollectorDashboardStats.empty(), dayState, true, colors, isDarkMode)
+                      : _buildRouteModeContent(CollectorDashboardStats.empty(), weekState, routesAsync, selectedRoute, true, colors, isDarkMode),
+                  error: (_, __) => isWorkMode
+                      ? _buildWorkModeContent(CollectorDashboardStats.empty(), dayState, false, colors, isDarkMode)
+                      : _buildRouteModeContent(CollectorDashboardStats.empty(), weekState, routesAsync, selectedRoute, false, colors, isDarkMode),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push(AppRoutes.createCredit),
-        backgroundColor: AppColors.primary,
-        elevation: 2,
-        child: const Icon(LucideIcons.plus, size: 24, color: Colors.white),
-      ),
+      // Only show FAB when locality is selected (for new credit)
+      floatingActionButton: isWorkMode
+          ? FloatingActionButton(
+              onPressed: () => context.push(AppRoutes.createCredit),
+              backgroundColor: AppColors.primary,
+              elevation: 2,
+              child: const Icon(LucideIcons.plus, size: 24, color: Colors.white),
+            )
+          : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: _BottomNavBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() => _currentIndex = index);
-          _handleNavigation(index);
-        },
-      ),
+      bottomNavigationBar: isWorkMode
+          ? _WorkModeNavBar(
+              currentIndex: _currentIndex,
+              onTap: (index) {
+                setState(() => _currentIndex = index);
+                _handleWorkNavigation(index);
+              },
+            )
+          : _GeneralNavBar(
+              currentIndex: _currentIndex,
+              onTap: (index) {
+                setState(() => _currentIndex = index);
+                _handleGeneralNavigation(index);
+              },
+            ),
     );
   }
 
-  Widget _buildContent(
+  // Navigation when locality is selected (work mode)
+  void _handleWorkNavigation(int index) {
+    switch (index) {
+      case 0: // Cobranza
+        context.push(AppRoutes.selectLocation);
+        break;
+      case 1: // Créditos
+        context.push(AppRoutes.creditsToday);
+        break;
+      case 2: // FAB (handled separately)
+        break;
+      case 3: // Gastos
+        // TODO: Gastos page
+        break;
+      case 4: // Resumen
+        context.push(AppRoutes.jornada);
+        break;
+    }
+  }
+
+  // Navigation when no locality selected (general mode)
+  void _handleGeneralNavigation(int index) {
+    switch (index) {
+      case 0: // Inicio
+        break;
+      case 1: // Jornada (all localities summary)
+        context.push(AppRoutes.jornada);
+        break;
+      case 2: // Clientes
+        context.push(AppRoutes.clients);
+        break;
+    }
+  }
+
+  // ===========================================================================
+  // ROUTE MODE CONTENT (Weekly dashboard - no locality selected)
+  // ===========================================================================
+  Widget _buildRouteModeContent(
     CollectorDashboardStats stats,
     WeekState weekState,
     AsyncValue<List<RouteModel>> routesAsync,
@@ -198,7 +276,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                // Week navigator
+                // Week navigator (ROUTE MODE = WEEKLY)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: _WeekNav(
@@ -311,22 +389,520 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     );
   }
 
-  void _handleNavigation(int index) {
-    switch (index) {
-      case 0:
-        break;
-      case 1:
-        context.push(AppRoutes.selectLocation);
-        break;
-      case 2:
-        break;
-      case 3:
-        context.push(AppRoutes.clients);
-        break;
-      case 4:
-        context.push(AppRoutes.reports);
-        break;
-    }
+  // ===========================================================================
+  // WORK MODE CONTENT (Daily dashboard - locality selected)
+  // ===========================================================================
+  Widget _buildWorkModeContent(
+    CollectorDashboardStats stats,
+    DayState dayState,
+    bool isLoading,
+    DashboardColors colors,
+    bool isDarkMode,
+  ) {
+    // Work mode uses a green/teal accent to differentiate from route mode
+    final workModeColors = DashboardColors(
+      heroBackground: const Color(0xFF0F766E), // Teal 700
+      heroTextPrimary: Colors.white,
+      heroTextSecondary: const Color(0xFF99F6E4), // Teal 200
+      heroAccent: Colors.white,
+      heroProgressBar: const Color(0x33FFFFFF),
+      heroProgressFill: Colors.white,
+      weekNavBackground: const Color(0x22FFFFFF),
+      weekNavText: Colors.white,
+      weekNavButton: Colors.white,
+      avatarBackground: const Color(0x22FFFFFF),
+      routeSelectorBackground: const Color(0x33FFFFFF),
+      statusDotOnline: const Color(0xFF22C55E),
+      scaffoldBackground: colors.scaffoldBackground,
+      criticalBannerBackground: colors.criticalBannerBackground,
+      criticalBannerText: colors.criticalBannerText,
+      criticalAccent: colors.criticalAccent,
+      statSuccess: Colors.white,
+      statWarning: const Color(0xFFFEF3C7),
+    );
+
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top section with work mode themed background (teal/green)
+          Container(
+            color: workModeColors.heroBackground,
+            child: Column(
+              children: [
+                const SizedBox(height: 16),
+                // Day navigator (WORK MODE = DAILY)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: _DayNav(
+                    dayState: dayState,
+                    onPrevious: () => ref.read(dayStateProvider.notifier).goToPreviousDay(),
+                    onNext: dayState.canGoNext ? () => ref.read(dayStateProvider.notifier).goToNextDay() : null,
+                    onToday: dayState.isToday ? null : () => ref.read(dayStateProvider.notifier).goToToday(),
+                    colors: workModeColors,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // Daily summary hero - simplified for day view
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
+                    children: [
+                      Text(
+                        'Resumen del Día',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: workModeColors.heroTextSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // TODO: Replace with actual daily stats when available
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _DailyStat(
+                            label: 'Cobros',
+                            value: isLoading ? '--' : '${stats.collectedPaymentsThisWeek}',
+                            colors: workModeColors,
+                          ),
+                          Container(
+                            width: 1,
+                            height: 40,
+                            color: workModeColors.heroTextSecondary.withOpacity(0.3),
+                          ),
+                          _DailyStat(
+                            label: 'Monto',
+                            value: isLoading ? '--' : _currencyFormat.format(stats.collectedAmountThisWeek),
+                            colors: workModeColors,
+                          ),
+                          Container(
+                            width: 1,
+                            height: 40,
+                            color: workModeColors.heroTextSecondary.withOpacity(0.3),
+                          ),
+                          _DailyStat(
+                            label: 'Créditos',
+                            value: isLoading ? '--' : '${stats.newLoansThisWeek}',
+                            colors: workModeColors,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
+            ),
+          ),
+          // Content section - Daily operations
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Quick actions for work mode
+                Text(
+                  'Acciones Rápidas',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _QuickActionCard(
+                        icon: LucideIcons.dollarSign,
+                        label: 'Cobrar',
+                        color: const Color(0xFF0F766E),
+                        onTap: () => context.push(AppRoutes.selectLocation),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _QuickActionCard(
+                        icon: LucideIcons.plus,
+                        label: 'Nuevo Crédito',
+                        color: AppColors.primary,
+                        onTap: () => context.push(AppRoutes.createCredit),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _QuickActionCard(
+                        icon: LucideIcons.creditCard,
+                        label: 'Créditos Hoy',
+                        color: const Color(0xFF7C3AED),
+                        onTap: () => context.push(AppRoutes.creditsToday),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _QuickActionCard(
+                        icon: LucideIcons.receipt,
+                        label: 'Gastos',
+                        color: const Color(0xFFEA580C),
+                        onTap: () {
+                          // TODO: Navigate to expenses page
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                // Today's activity summary
+                Text(
+                  'Actividad del Día',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Key metrics for the day
+                Row(
+                  children: [
+                    Expanded(
+                      child: _MetricCard(
+                        label: 'Pagos Recibidos',
+                        value: '${stats.collectedPaymentsThisWeek}',
+                        subtitle: 'clientes',
+                        icon: LucideIcons.checkCircle,
+                        isLoading: isLoading,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _MetricCard(
+                        label: 'Créditos Otorgados',
+                        value: '${stats.newLoansThisWeek}',
+                        subtitle: 'hoy',
+                        icon: LucideIcons.banknote,
+                        isLoading: isLoading,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 80),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// WORK MODE HEADER - Shows current locality with exit option
+// =============================================================================
+
+class _WorkModeHeader extends StatelessWidget {
+  final String leadName;
+  final String? locationName;
+  final VoidCallback onExit;
+  final VoidCallback onChangeLead;
+
+  const _WorkModeHeader({
+    required this.leadName,
+    required this.locationName,
+    required this.onExit,
+    required this.onChangeLead,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F766E), // Teal 700
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Mode indicator
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(LucideIcons.briefcase, size: 14, color: Colors.white),
+                const SizedBox(width: 4),
+                const Text(
+                  'TRABAJO',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Locality info
+          Expanded(
+            child: GestureDetector(
+              onTap: onChangeLead,
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.mapPin, size: 16, color: Colors.white70),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          locationName ?? 'Sin localidad',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          leadName,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.white.withOpacity(0.7),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(LucideIcons.chevronDown, size: 16, color: Colors.white70),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Exit button
+          GestureDetector(
+            onTap: onExit,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.white.withOpacity(0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(LucideIcons.logOut, size: 14, color: Colors.white),
+                  const SizedBox(width: 4),
+                  const Text(
+                    'Salir',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// DAY NAVIGATOR - For work mode daily navigation
+// =============================================================================
+
+class _DayNav extends StatelessWidget {
+  final DayState dayState;
+  final VoidCallback onPrevious;
+  final VoidCallback? onNext;
+  final VoidCallback? onToday;
+  final DashboardColors colors;
+
+  const _DayNav({
+    required this.dayState,
+    required this.onPrevious,
+    this.onNext,
+    this.onToday,
+    required this.colors,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+      decoration: BoxDecoration(
+        color: colors.weekNavBackground,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          _NavBtn(icon: LucideIcons.chevronLeft, onTap: onPrevious, colors: colors),
+          Expanded(
+            child: Column(
+              children: [
+                Text(
+                  dayState.label,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: colors.heroTextPrimary),
+                ),
+                Text(
+                  dayState.dateLabel,
+                  style: TextStyle(fontSize: 11, color: colors.heroTextSecondary),
+                ),
+              ],
+            ),
+          ),
+          if (!dayState.isToday) ...[
+            _NavBtn(icon: LucideIcons.chevronRight, onTap: onNext, colors: colors),
+            const SizedBox(width: 4),
+            GestureDetector(
+              onTap: onToday,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: colors.weekNavButton,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Hoy',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: colors.heroBackground),
+                ),
+              ),
+            ),
+          ] else
+            _NavBtn(icon: LucideIcons.chevronRight, onTap: null, colors: colors),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// DAILY STAT - For work mode hero section
+// =============================================================================
+
+class _DailyStat extends StatelessWidget {
+  final String label;
+  final String value;
+  final DashboardColors colors;
+
+  const _DailyStat({
+    required this.label,
+    required this.value,
+    required this.colors,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            color: colors.heroTextPrimary,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: colors.heroTextSecondary,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// =============================================================================
+// QUICK ACTION CARD - For work mode actions
+// =============================================================================
+
+class _QuickActionCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _QuickActionCard({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 22, color: color),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+            Icon(LucideIcons.chevronRight, size: 18, color: AppColors.textMuted),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -1443,14 +2019,17 @@ class _ComparisonRow extends StatelessWidget {
 }
 
 // =============================================================================
-// BOTTOM NAV BAR
+// WORK MODE NAV BAR (when locality is selected)
 // =============================================================================
 
-class _BottomNavBar extends StatelessWidget {
+class _WorkModeNavBar extends StatelessWidget {
   final int currentIndex;
   final Function(int) onTap;
 
-  const _BottomNavBar({required this.currentIndex, required this.onTap});
+  const _WorkModeNavBar({
+    required this.currentIndex,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1471,11 +2050,54 @@ class _BottomNavBar extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
+              _NavItem(icon: LucideIcons.dollarSign, label: 'Cobranza', isSelected: currentIndex == 0, onTap: () => onTap(0)),
+              _NavItem(icon: LucideIcons.creditCard, label: 'Créditos', isSelected: currentIndex == 1, onTap: () => onTap(1)),
+              const SizedBox(width: 56), // Space for FAB
+              _NavItem(icon: LucideIcons.receipt, label: 'Gastos', isSelected: currentIndex == 3, onTap: () => onTap(3)),
+              _NavItem(icon: LucideIcons.clipboardList, label: 'Resumen', isSelected: currentIndex == 4, onTap: () => onTap(4)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// GENERAL NAV BAR (when no locality selected)
+// =============================================================================
+
+class _GeneralNavBar extends StatelessWidget {
+  final int currentIndex;
+  final Function(int) onTap;
+
+  const _GeneralNavBar({
+    required this.currentIndex,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: SizedBox(
+          height: 60,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
               _NavItem(icon: LucideIcons.home, label: 'Inicio', isSelected: currentIndex == 0, onTap: () => onTap(0)),
-              _NavItem(icon: LucideIcons.dollarSign, label: 'Cobrar', isSelected: currentIndex == 1, onTap: () => onTap(1)),
-              const SizedBox(width: 56),
-              _NavItem(icon: LucideIcons.users, label: 'Clientes', isSelected: currentIndex == 3, onTap: () => onTap(3)),
-              _NavItem(icon: LucideIcons.barChart3, label: 'Reportes', isSelected: currentIndex == 4, onTap: () => onTap(4)),
+              _NavItem(icon: LucideIcons.clipboardList, label: 'Jornada', isSelected: currentIndex == 1, onTap: () => onTap(1)),
+              _NavItem(icon: LucideIcons.users, label: 'Clientes', isSelected: currentIndex == 2, onTap: () => onTap(2)),
             ],
           ),
         ),
@@ -1591,3 +2213,5 @@ class _SkeletonState extends State<_Skeleton> with SingleTickerProviderStateMixi
     );
   }
 }
+
+

@@ -38,6 +38,7 @@ const schema = Schema([
   Table('Location', [
     Column.text('name'),
     Column.text('municipality'), // FK to Municipality.id
+    Column.text('route'), // FK to Route.id (optional)
   ]),
 
   // Municipality table - For location lookup
@@ -130,8 +131,8 @@ const schema = Schema([
 
   // RouteEmployees - Many-to-many relationship
   Table('_RouteEmployees', [
-    Column.text('A'), // Employee.id
-    Column.text('B'), // Route.id
+    Column.text('employee'), // Employee.id
+    Column.text('route'), // Route.id
   ]),
 
   // AccountEntry table - Financial ledger entries (can be 200K+ records)

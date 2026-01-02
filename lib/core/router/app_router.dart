@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../providers/auth_provider.dart';
+import '../../providers/collector_dashboard_provider.dart';
 import '../../ui/pages/onboarding_page.dart';
 import '../../ui/pages/login_page.dart';
 import '../../ui/pages/dashboard_page.dart';
@@ -11,6 +12,9 @@ import '../../ui/pages/critical_clients_page.dart';
 import '../../ui/pages/collection/select_location_page.dart';
 import '../../ui/pages/collection/client_list_page.dart';
 import '../../ui/pages/collection/register_payment_page.dart';
+import '../../ui/pages/create_credit/create_credit_page.dart';
+import '../../ui/pages/credits_page.dart';
+import '../../ui/pages/jornada_page.dart';
 
 /// Route paths
 class AppRoutes {
@@ -26,9 +30,13 @@ class AppRoutes {
 
   // Create credit wizard
   static const String createCredit = '/create-credit';
+  static const String creditsToday = '/credits-today';
 
   // Critical clients (week 4+ without paying)
   static const String criticalClients = '/critical-clients';
+
+  // Jornada - daily summary
+  static const String jornada = '/jornada';
 
   // Other
   static const String clients = '/clients';
@@ -38,6 +46,7 @@ class AppRoutes {
 /// Router provider
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authProvider);
+  final selectedLead = ref.watch(selectedLeadProvider);
 
   return GoRouter(
     initialLocation: authState.isAuthenticated
@@ -48,10 +57,21 @@ final routerProvider = Provider<GoRouter>((ref) {
     // Redirect logic
     redirect: (context, state) {
       final isAuthenticated = authState.isAuthenticated;
-      final isOnboarding = state.matchedLocation == AppRoutes.onboarding;
-      final isLogin = state.matchedLocation == AppRoutes.login;
+      final hasLocalitySelected = selectedLead != null;
+      final currentPath = state.matchedLocation;
 
-      // If not authenticated, allow onboarding and login
+      // Public routes (no auth required)
+      final isOnboarding = currentPath == AppRoutes.onboarding;
+      final isLogin = currentPath == AppRoutes.login;
+
+      // Routes that require a locality to be selected
+      final isOperationRoute = currentPath == AppRoutes.createCredit ||
+          currentPath == AppRoutes.selectLocation ||
+          currentPath == AppRoutes.clientList ||
+          currentPath == AppRoutes.registerPayment ||
+          currentPath == AppRoutes.creditsToday;
+
+      // If not authenticated, allow only onboarding and login
       if (!isAuthenticated) {
         if (isOnboarding || isLogin) {
           return null;
@@ -61,6 +81,12 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // If authenticated and trying to access onboarding/login, redirect to dashboard
       if (isAuthenticated && (isOnboarding || isLogin)) {
+        return AppRoutes.dashboard;
+      }
+
+      // If trying to perform operations without a locality selected, redirect to dashboard
+      // The dashboard will show the message to select a locality
+      if (isAuthenticated && !hasLocalitySelected && isOperationRoute) {
         return AppRoutes.dashboard;
       }
 
@@ -116,6 +142,24 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.criticalClients,
         builder: (context, state) => const CriticalClientsPage(),
+      ),
+
+      // Create credit wizard
+      GoRoute(
+        path: AppRoutes.createCredit,
+        builder: (context, state) => const CreateCreditPage(),
+      ),
+
+      // Credits today page
+      GoRoute(
+        path: AppRoutes.creditsToday,
+        builder: (context, state) => const CreditsPage(),
+      ),
+
+      // Jornada - daily summary
+      GoRoute(
+        path: AppRoutes.jornada,
+        builder: (context, state) => const JornadaPage(),
       ),
 
       // Clients page (redirects to client history for now)

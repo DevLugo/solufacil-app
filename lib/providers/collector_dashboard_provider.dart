@@ -1,14 +1,39 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:powersync/powersync.dart';
 import 'powersync_provider.dart';
 import 'auth_provider.dart';
 
-/// Route model for selector
+/// Route model for selector (Ruta - highest level)
 class RouteModel {
   final String id;
   final String name;
 
   const RouteModel({required this.id, required this.name});
+}
+
+/// Lead/Locality model (Localidad - where you work within a route)
+/// A Lead is an Employee with type LEAD, associated with a Location
+class LeadModel {
+  final String id;
+  final String name;           // Lead's full name
+  final String? locationId;    // Location ID
+  final String? locationName;  // Location name (localidad)
+
+  const LeadModel({
+    required this.id,
+    required this.name,
+    this.locationId,
+    this.locationName,
+  });
+
+  /// Display name: "Localidad · (Nombre)" or just "Nombre" if no locality
+  String get displayName {
+    if (locationName != null && locationName!.isNotEmpty) {
+      return '$locationName · ($name)';
+    }
+    return name;
+  }
 }
 
 /// Critical client model - clients in week 4+ without paying
@@ -146,6 +171,117 @@ final weekStateProvider =
   return WeekStateNotifier();
 });
 
+// =============================================================================
+// DAY STATE - For Work Mode (daily view)
+// =============================================================================
+
+/// Selected day state for work mode
+class DayState {
+  final DateTime date;
+  final bool isToday;
+
+  DayState({
+    required this.date,
+    required this.isToday,
+  });
+
+  /// Start of the day (00:00:00)
+  DateTime get dayStart => DateTime(date.year, date.month, date.day);
+
+  /// End of the day (23:59:59)
+  DateTime get dayEnd => DateTime(date.year, date.month, date.day, 23, 59, 59);
+
+  String get label {
+    if (isToday) return 'Hoy';
+    final now = DateTime.now();
+    final yesterday = DateTime(now.year, now.month, now.day - 1);
+    if (date.year == yesterday.year && date.month == yesterday.month && date.day == yesterday.day) {
+      return 'Ayer';
+    }
+    final days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    return days[date.weekday % 7];
+  }
+
+  String get dateLabel {
+    final months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    return '${date.day} ${months[date.month - 1]}';
+  }
+
+  String get fullLabel => '$label, $dateLabel';
+
+  factory DayState.today() {
+    final now = DateTime.now();
+    return DayState(
+      date: DateTime(now.year, now.month, now.day),
+      isToday: true,
+    );
+  }
+
+  DayState previousDay() {
+    final newDate = date.subtract(const Duration(days: 1));
+    return DayState(
+      date: newDate,
+      isToday: false,
+    );
+  }
+
+  DayState nextDay() {
+    final newDate = date.add(const Duration(days: 1));
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final isNowToday = newDate.year == today.year &&
+                       newDate.month == today.month &&
+                       newDate.day == today.day;
+    return DayState(
+      date: newDate,
+      isToday: isNowToday,
+    );
+  }
+
+  /// Check if we can go to the next day (can't go beyond today)
+  bool get canGoNext => !isToday;
+}
+
+/// Day state notifier for work mode
+class DayStateNotifier extends StateNotifier<DayState> {
+  DayStateNotifier() : super(DayState.today());
+
+  void goToPreviousDay() {
+    state = state.previousDay();
+  }
+
+  void goToNextDay() {
+    if (state.canGoNext) {
+      state = state.nextDay();
+    }
+  }
+
+  void goToToday() {
+    state = DayState.today();
+  }
+
+  void goToDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final targetDate = DateTime(date.year, date.month, date.day);
+
+    // Don't allow future dates
+    if (targetDate.isAfter(today)) return;
+
+    state = DayState(
+      date: targetDate,
+      isToday: targetDate.year == today.year &&
+               targetDate.month == today.month &&
+               targetDate.day == today.day,
+    );
+  }
+}
+
+final dayStateProvider =
+    StateNotifierProvider<DayStateNotifier, DayState>((ref) {
+  return DayStateNotifier();
+});
+
 /// Routes provider
 final routesProvider = FutureProvider<List<RouteModel>>((ref) async {
   final dbAsyncValue = ref.watch(powerSyncDatabaseProvider);
@@ -166,8 +302,78 @@ final routesProvider = FutureProvider<List<RouteModel>>((ref) async {
   }
 });
 
-/// Selected route provider
+/// Selected route provider (Ruta)
 final selectedRouteProvider = StateProvider<RouteModel?>((ref) => null);
+
+/// Selected lead/locality provider (Localidad - required for work mode)
+final selectedLeadProvider = StateProvider<LeadModel?>((ref) => null);
+
+/// Leads by route provider - gets all leads (localidades) for a given route
+/// Uses _RouteEmployees join table for route-employee relationships
+final leadsByRouteProvider = FutureProvider.family<List<LeadModel>, String>((ref, routeId) async {
+  final dbAsyncValue = ref.watch(powerSyncDatabaseProvider);
+  final db = dbAsyncValue.valueOrNull;
+  if (db == null) {
+    debugPrint('[leadsByRouteProvider] Database not ready');
+    return [];
+  }
+
+  try {
+    debugPrint('[leadsByRouteProvider] Querying leads for route: $routeId');
+
+    // Debug: Check _RouteEmployees for this route
+    final routeEmployees = await db.execute(
+      'SELECT employee, route FROM "_RouteEmployees" WHERE route = ? LIMIT 10',
+      [routeId],
+    );
+    debugPrint('[leadsByRouteProvider] RouteEmployees for route $routeId: ${routeEmployees.length}');
+
+    // Query using _RouteEmployees join table
+    // Gets employees assigned to this route via the many-to-many relationship
+    final result = await db.execute('''
+      SELECT DISTINCT
+        e.id,
+        e.type as employeeType,
+        pd.fullName,
+        addr.location as locationId,
+        loc.name as locationName
+      FROM "_RouteEmployees" re
+      JOIN Employee e ON re.employee = e.id
+      JOIN PersonalData pd ON e.personalData = pd.id
+      LEFT JOIN Address addr ON addr.personalData = pd.id
+      LEFT JOIN Location loc ON addr.location = loc.id
+      WHERE re.route = ? AND (e.type = 'LEAD' OR e.type = 'ROUTE_LEAD')
+      ORDER BY loc.name, pd.fullName
+    ''', [routeId]);
+
+    debugPrint('[leadsByRouteProvider] Found ${result.length} leads for route $routeId');
+
+    final leads = result.map((row) => LeadModel(
+      id: row['id'] as String,
+      name: row['fullName'] as String? ?? 'Sin nombre',
+      locationId: row['locationId'] as String?,
+      locationName: row['locationName'] as String?,
+    )).toList();
+
+    for (final lead in leads) {
+      debugPrint('[leadsByRouteProvider] Lead: ${lead.name} - Location: ${lead.locationName}');
+    }
+
+    return leads;
+  } catch (e, stack) {
+    debugPrint('[leadsByRouteProvider] Error: $e');
+    debugPrint('[leadsByRouteProvider] Stack: $stack');
+    return [];
+  }
+});
+
+/// All leads for current route (convenience provider)
+final currentRouteLeadsProvider = FutureProvider<List<LeadModel>>((ref) async {
+  final selectedRoute = ref.watch(selectedRouteProvider);
+  if (selectedRoute == null) return [];
+
+  return ref.watch(leadsByRouteProvider(selectedRoute.id).future);
+});
 
 /// Collector-focused dashboard stats
 class CollectorDashboardStats {
