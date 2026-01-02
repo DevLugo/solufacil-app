@@ -253,22 +253,12 @@ class _CriticalAlertCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              week5PlusCount > 0 ? const Color(0xFF7C2D12) : AppColors.error,
-              AppColors.error,
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: week5PlusCount > 0 ? const Color(0xFFB91C1C) : const Color(0xFFDC2626),
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.error.withOpacity(0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          border: Border.all(
+            color: const Color(0xFF991B1B),
+            width: 1,
+          ),
         ),
         child: Row(
           children: [
@@ -913,6 +903,8 @@ class _RouteChip extends StatelessWidget {
   final RouteModel? selectedRoute;
   final Function(RouteModel?) onRouteSelected;
 
+  static const String _allRoutesId = '__ALL__';
+
   const _RouteChip({
     required this.routes,
     required this.selectedRoute,
@@ -921,13 +913,21 @@ class _RouteChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<RouteModel?>(
-      onSelected: onRouteSelected,
+    // Use String IDs to handle "all" option (null values don't trigger onSelected)
+    return PopupMenuButton<String>(
+      onSelected: (id) {
+        if (id == _allRoutesId) {
+          onRouteSelected(null);
+        } else {
+          final route = routes.firstWhere((r) => r.id == id);
+          onRouteSelected(route);
+        }
+      },
       offset: const Offset(0, 40),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       itemBuilder: (context) => [
-        PopupMenuItem<RouteModel?>(
-          value: null,
+        PopupMenuItem<String>(
+          value: _allRoutesId,
           child: Row(
             children: [
               Icon(
@@ -946,8 +946,8 @@ class _RouteChip extends StatelessWidget {
             ],
           ),
         ),
-        ...routes.map((route) => PopupMenuItem<RouteModel?>(
-              value: route,
+        ...routes.map((route) => PopupMenuItem<String>(
+              value: route.id,
               child: Row(
                 children: [
                   Icon(
