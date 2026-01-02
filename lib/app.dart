@@ -1,52 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
-import 'providers/auth_provider.dart';
-import 'ui/pages/login_page.dart';
-import 'ui/pages/client_history_page.dart';
+import 'core/theme/colors.dart';
 
 class SoluFacilApp extends ConsumerWidget {
   const SoluFacilApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authProvider);
+    final router = ref.watch(routerProvider);
 
-    // Set system UI overlay style for dark theme
+    // Set system UI overlay style for light theme
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        systemNavigationBarColor: Color(0xFF0A0E17),
-        systemNavigationBarIconBrightness: Brightness.light,
+        statusBarIconBrightness: Brightness.dark,
+        systemNavigationBarColor: AppColors.background,
+        systemNavigationBarIconBrightness: Brightness.dark,
       ),
     );
 
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'SoluFácil',
       debugShowCheckedModeBanner: false,
 
-      // Premium Dark Theme
-      theme: AppTheme.darkTheme,
+      // Light theme as base (from design-example)
+      theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.dark,
+      themeMode: ThemeMode.light,
 
-      // Initial route based on auth state
-      initialRoute: authState.isAuthenticated ? '/client-history' : '/login',
-
-      // Route definitions
-      routes: {
-        '/login': (context) => const LoginPage(),
-        '/client-history': (context) => const ClientHistoryPage(),
-      },
-
-      // Handle unknown routes
-      onUnknownRoute: (settings) {
-        return MaterialPageRoute(
-          builder: (context) => const LoginPage(),
-        );
-      },
+      // GoRouter configuration
+      routerConfig: router,
     );
   }
 }

@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/colors.dart';
@@ -27,7 +26,7 @@ class _ClientHistoryPageState extends ConsumerState<ClientHistoryPage>
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 400),
     );
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
@@ -47,6 +46,7 @@ class _ClientHistoryPageState extends ConsumerState<ClientHistoryPage>
     final selectedClientState = ref.watch(selectedClientProvider);
     final isSyncing = ref.watch(isSyncingProvider);
     final size = MediaQuery.of(context).size;
+    final hasSelectedClient = selectedClientState.selectedClient != null;
 
     return Scaffold(
       body: Stack(
@@ -58,8 +58,10 @@ class _ClientHistoryPageState extends ConsumerState<ClientHistoryPage>
           SafeArea(
             child: Column(
               children: [
-                // Custom App Bar
-                _buildAppBar(authState, isSyncing),
+                // Dynamic App Bar based on selection state
+                hasSelectedClient
+                    ? _buildClientAppBar(selectedClientState, isSyncing)
+                    : _buildSearchAppBar(isSyncing),
 
                 // Main Content
                 Expanded(
@@ -73,92 +75,10 @@ class _ClientHistoryPageState extends ConsumerState<ClientHistoryPage>
                         }
                       },
                       color: AppColors.primary,
-                      backgroundColor: AppColors.darkSurfaceElevated,
-                      child: CustomScrollView(
-                        physics: const BouncingScrollPhysics(
-                          parent: AlwaysScrollableScrollPhysics(),
-                        ),
-                        slivers: [
-                          // Search Section
-                          SliverToBoxAdapter(
-                            child: _buildSearchSection(),
-                          ),
-
-                          // Client Profile
-                          if (selectedClientState.selectedClient != null) ...[
-                            SliverToBoxAdapter(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16),
-                                child: ClientProfileCard(
-                                  client: selectedClientState.selectedClient!,
-                                  history: selectedClientState.history,
-                                  isLoading: selectedClientState.isLoading,
-                                  onClear: () {
-                                    ref.read(selectedClientProvider.notifier).clear();
-                                  },
-                                ),
-                              ),
-                            ),
-                          ],
-
-                          // Loans Sections
-                          if (selectedClientState.history != null) ...[
-                            // Loans as Client
-                            if (selectedClientState.history!.loansAsClient.isNotEmpty) ...[
-                              SliverToBoxAdapter(
-                                child: _buildSectionHeader(
-                                  icon: Icons.account_circle_outlined,
-                                  title: 'Préstamos como Cliente',
-                                  count: selectedClientState.history!.loansAsClient.length,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                              SliverToBoxAdapter(
-                                child: LoansList(
-                                  loans: selectedClientState.history!.loansAsClient,
-                                  isCollateral: false,
-                                ),
-                              ),
-                            ],
-
-                            // Loans as Collateral
-                            if (selectedClientState.history!.loansAsCollateral.isNotEmpty) ...[
-                              SliverToBoxAdapter(
-                                child: _buildSectionHeader(
-                                  icon: Icons.verified_user_outlined,
-                                  title: 'Préstamos como Aval',
-                                  count: selectedClientState.history!.loansAsCollateral.length,
-                                  color: AppColors.accent,
-                                ),
-                              ),
-                              SliverToBoxAdapter(
-                                child: LoansList(
-                                  loans: selectedClientState.history!.loansAsCollateral,
-                                  isCollateral: true,
-                                ),
-                              ),
-                            ],
-
-                            // No loans empty state
-                            if (selectedClientState.history!.loansAsClient.isEmpty &&
-                                selectedClientState.history!.loansAsCollateral.isEmpty)
-                              SliverToBoxAdapter(
-                                child: _buildEmptyLoansState(),
-                              ),
-                          ],
-
-                          // No client selected empty state
-                          if (selectedClientState.selectedClient == null)
-                            SliverFillRemaining(
-                              hasScrollBody: false,
-                              child: _buildNoClientState(),
-                            ),
-
-                          const SliverToBoxAdapter(
-                            child: SizedBox(height: 32),
-                          ),
-                        ],
-                      ),
+                      backgroundColor: AppColors.background,
+                      child: hasSelectedClient
+                          ? _buildClientContent(selectedClientState)
+                          : _buildSearchContent(),
                     ),
                   ),
                 ),
@@ -173,11 +93,10 @@ class _ClientHistoryPageState extends ConsumerState<ClientHistoryPage>
   Widget _buildBackground(Size size) {
     return Container(
       decoration: const BoxDecoration(
-        color: AppColors.darkBackground,
+        color: AppColors.surface,
       ),
       child: Stack(
         children: [
-          // Subtle gradient accent
           Positioned(
             top: -100,
             right: -100,
@@ -199,87 +118,287 @@ class _ClientHistoryPageState extends ConsumerState<ClientHistoryPage>
     );
   }
 
-  Widget _buildAppBar(AuthState authState, bool isSyncing) {
-    return ClipRRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          decoration: BoxDecoration(
-            color: AppColors.darkSurface.withOpacity(0.8),
-            border: Border(
-              bottom: BorderSide(
-                color: AppColors.darkBorder.withOpacity(0.3),
-              ),
-            ),
-          ),
-          child: Row(
-            children: [
-              // Menu / Logout Button
-              _buildIconButton(
-                icon: Icons.logout_rounded,
-                onPressed: () async {
-                  await ref.read(authProvider.notifier).logout();
-                  if (mounted) {
-                    Navigator.of(context).pushReplacementNamed('/login');
-                  }
-                },
-              ),
+  // ============================================================
+  // SEARCH MODE (No client selected)
+  // ============================================================
 
-              const SizedBox(width: 8),
-
-              // Title
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Historial',
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            color: AppColors.textPrimaryDark,
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                    Row(
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: isSyncing ? AppColors.warning : AppColors.success,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          isSyncing ? 'Sincronizando...' : 'Conectado',
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: AppColors.textSecondaryDark,
-                              ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              // Sync Button
-              _buildIconButton(
-                icon: Icons.sync_rounded,
-                isLoading: isSyncing,
-                onPressed: isSyncing ? null : () => triggerSync(ref),
-              ),
-
-              const SizedBox(width: 4),
-
-              // User Menu
-              _buildUserMenu(authState),
-            ],
+  Widget _buildSearchAppBar(bool isSyncing) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        border: Border(
+          bottom: BorderSide(
+            color: AppColors.border.withOpacity(0.5),
           ),
         ),
       ),
+      child: Column(
+        children: [
+          // Top row with back button and sync status
+          Row(
+            children: [
+              _buildIconButton(
+                icon: Icons.arrow_back_rounded,
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Buscar Cliente',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: AppColors.secondary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ),
+              // Sync indicator
+              if (isSyncing)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(AppColors.warning),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Sync',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: AppColors.warning,
+                              fontWeight: FontWeight.w500,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Search bar integrated in app bar
+          ClientSearchBar(
+            onClientSelected: (client) {
+              ref.read(selectedClientProvider.notifier).selectClient(client);
+              ref.read(clientSearchProvider.notifier).clear();
+              // Reset animation for client content
+              _animationController.reset();
+              _animationController.forward();
+            },
+          ),
+        ],
+      ),
     );
   }
+
+  Widget _buildSearchContent() {
+    return CustomScrollView(
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
+      slivers: [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: _buildNoClientState(),
+        ),
+      ],
+    );
+  }
+
+  // ============================================================
+  // CLIENT MODE (Client selected)
+  // ============================================================
+
+  Widget _buildClientAppBar(SelectedClientState state, bool isSyncing) {
+    final client = state.selectedClient!;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        border: Border(
+          bottom: BorderSide(
+            color: AppColors.border.withOpacity(0.5),
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Back/Clear button
+          _buildIconButton(
+            icon: Icons.arrow_back_rounded,
+            onPressed: () {
+              ref.read(selectedClientProvider.notifier).clear();
+              // Reset animation for search content
+              _animationController.reset();
+              _animationController.forward();
+            },
+          ),
+          const SizedBox(width: 12),
+
+          // Client name as title
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  client.name,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: AppColors.secondary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (client.clientCode != null || client.locationName != null)
+                  Row(
+                    children: [
+                      Icon(
+                        client.clientCode != null ? Icons.badge_outlined : Icons.location_on_outlined,
+                        size: 12,
+                        color: AppColors.textMuted,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        client.clientCode ?? client.locationName ?? '',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: AppColors.textMuted,
+                            ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+
+          // Sync button
+          _buildIconButton(
+            icon: Icons.sync_rounded,
+            isLoading: isSyncing,
+            onPressed: isSyncing
+                ? null
+                : () async {
+                    await triggerSync(ref);
+                    await ref.read(selectedClientProvider.notifier).refresh();
+                  },
+          ),
+
+          const SizedBox(width: 4),
+
+          // New search button
+          _buildIconButton(
+            icon: Icons.search_rounded,
+            onPressed: () {
+              ref.read(selectedClientProvider.notifier).clear();
+              _animationController.reset();
+              _animationController.forward();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClientContent(SelectedClientState state) {
+    return CustomScrollView(
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
+      slivers: [
+        // Client Profile Card (compact version without name since it's in app bar)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: ClientProfileCard(
+              client: state.selectedClient!,
+              history: state.history,
+              isLoading: state.isLoading,
+              showHeader: false, // New prop to hide redundant header
+              onClear: () {
+                ref.read(selectedClientProvider.notifier).clear();
+              },
+            ),
+          ),
+        ),
+
+        // Loans Sections
+        if (state.history != null) ...[
+          // Loans as Client
+          if (state.history!.loansAsClient.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: _buildSectionHeader(
+                icon: Icons.account_circle_outlined,
+                title: 'Préstamos como Cliente',
+                count: state.history!.loansAsClient.length,
+                color: AppColors.primary,
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: LoansList(
+                loans: state.history!.loansAsClient,
+                isCollateral: false,
+              ),
+            ),
+          ],
+
+          // Loans as Collateral
+          if (state.history!.loansAsCollateral.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: _buildSectionHeader(
+                icon: Icons.verified_user_outlined,
+                title: 'Préstamos como Aval',
+                count: state.history!.loansAsCollateral.length,
+                color: AppColors.accent,
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: LoansList(
+                loans: state.history!.loansAsCollateral,
+                isCollateral: true,
+              ),
+            ),
+          ],
+
+          // No loans empty state
+          if (state.history!.loansAsClient.isEmpty &&
+              state.history!.loansAsCollateral.isEmpty)
+            SliverToBoxAdapter(
+              child: _buildEmptyLoansState(),
+            ),
+        ],
+
+        // Loading state
+        if (state.isLoading && state.history == null)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(48),
+              child: Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                ),
+              ),
+            ),
+          ),
+
+        const SliverToBoxAdapter(
+          child: SizedBox(height: 32),
+        ),
+      ],
+    );
+  }
+
+  // ============================================================
+  // SHARED WIDGETS
+  // ============================================================
 
   Widget _buildIconButton({
     required IconData icon,
@@ -288,10 +407,10 @@ class _ClientHistoryPageState extends ConsumerState<ClientHistoryPage>
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.darkSurfaceElevated,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: AppColors.darkBorder.withOpacity(0.5),
+          color: AppColors.border.withOpacity(0.5),
         ),
       ),
       child: Material(
@@ -313,111 +432,10 @@ class _ClientHistoryPageState extends ConsumerState<ClientHistoryPage>
                 : Icon(
                     icon,
                     size: 20,
-                    color: AppColors.textSecondaryDark,
+                    color: AppColors.textSecondary,
                   ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildUserMenu(AuthState authState) {
-    return PopupMenuButton<String>(
-      offset: const Offset(0, 50),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      color: AppColors.darkSurfaceElevated,
-      icon: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          gradient: AppColors.primaryGradient,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          (authState.user?.fullName ?? 'U').substring(0, 1).toUpperCase(),
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
-          ),
-        ),
-      ),
-      onSelected: (value) async {
-        if (value == 'logout') {
-          await ref.read(authProvider.notifier).logout();
-          if (mounted) {
-            Navigator.of(context).pushReplacementNamed('/login');
-          }
-        }
-      },
-      itemBuilder: (context) => [
-        PopupMenuItem(
-          enabled: false,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                authState.user?.fullName ?? 'Usuario',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: AppColors.textPrimaryDark,
-                    ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                authState.user?.email ?? '',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondaryDark,
-                    ),
-              ),
-            ],
-          ),
-        ),
-        const PopupMenuDivider(),
-        PopupMenuItem(
-          value: 'logout',
-          child: Row(
-            children: [
-              Icon(Icons.logout_rounded, size: 18, color: AppColors.error),
-              const SizedBox(width: 12),
-              Text(
-                'Cerrar sesión',
-                style: TextStyle(color: AppColors.error),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSearchSection() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Buscar Cliente',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: AppColors.textPrimaryDark,
-                ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Ingresa el nombre o código del cliente',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.textSecondaryDark,
-                ),
-          ),
-          const SizedBox(height: 16),
-          ClientSearchBar(
-            onClientSelected: (client) {
-              ref.read(selectedClientProvider.notifier).selectClient(client);
-              ref.read(clientSearchProvider.notifier).clear();
-            },
-          ),
-        ],
       ),
     );
   }
@@ -429,7 +447,7 @@ class _ClientHistoryPageState extends ConsumerState<ClientHistoryPage>
     required Color color,
   }) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
       child: Row(
         children: [
           Container(
@@ -445,7 +463,7 @@ class _ClientHistoryPageState extends ConsumerState<ClientHistoryPage>
             child: Text(
               title,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: AppColors.textPrimaryDark,
+                    color: AppColors.secondary,
                     fontWeight: FontWeight.w600,
                   ),
             ),
@@ -477,27 +495,27 @@ class _ClientHistoryPageState extends ConsumerState<ClientHistoryPage>
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: AppColors.darkSurfaceElevated,
+              color: AppColors.surface,
               borderRadius: BorderRadius.circular(100),
             ),
             child: Icon(
               Icons.history_rounded,
               size: 48,
-              color: AppColors.textMutedDark.withOpacity(0.5),
+              color: AppColors.textMuted.withOpacity(0.5),
             ),
           ),
           const SizedBox(height: 24),
           Text(
             'Sin historial de préstamos',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: AppColors.textSecondaryDark,
+                  color: AppColors.textSecondary,
                 ),
           ),
           const SizedBox(height: 8),
           Text(
             'Este cliente no tiene préstamos registrados',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.textMutedDark,
+                  color: AppColors.textMuted,
                 ),
             textAlign: TextAlign.center,
           ),
@@ -509,59 +527,55 @@ class _ClientHistoryPageState extends ConsumerState<ClientHistoryPage>
   Widget _buildNoClientState() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(48),
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // Animated Icon Container
             Container(
-              padding: const EdgeInsets.all(32),
+              padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
-                color: AppColors.darkSurfaceElevated,
+                color: AppColors.primary.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(100),
-                border: Border.all(
-                  color: AppColors.darkBorder.withOpacity(0.3),
-                ),
               ),
               child: Icon(
                 Icons.person_search_rounded,
-                size: 64,
-                color: AppColors.primary.withOpacity(0.5),
+                size: 56,
+                color: AppColors.primary.withOpacity(0.6),
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 28),
             Text(
-              'Selecciona un Cliente',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: AppColors.textPrimaryDark,
+              'Busca un cliente',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: AppColors.secondary,
+                    fontWeight: FontWeight.w600,
                   ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text(
-              'Usa la barra de búsqueda para encontrar\nun cliente y ver su historial completo',
+              'Ingresa nombre o código para ver\nel historial completo de préstamos',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondaryDark,
+                    color: AppColors.textSecondary,
                   ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
-            // Quick Tips
+            // Quick Tips - more compact
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.darkSurfaceElevated.withOpacity(0.5),
+                color: AppColors.background,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: AppColors.darkBorder.withOpacity(0.3),
+                  color: AppColors.border.withOpacity(0.5),
                 ),
               ),
               child: Column(
                 children: [
-                  _buildTip(Icons.search, 'Busca por nombre o código'),
-                  const SizedBox(height: 12),
                   _buildTip(Icons.offline_bolt_outlined, 'Funciona sin conexión'),
-                  const SizedBox(height: 12),
-                  _buildTip(Icons.sync, 'Datos sincronizados automáticamente'),
+                  const SizedBox(height: 10),
+                  _buildTip(Icons.sync, 'Sincronización automática'),
                 ],
               ),
             ),
@@ -573,13 +587,14 @@ class _ClientHistoryPageState extends ConsumerState<ClientHistoryPage>
 
   Widget _buildTip(IconData icon, String text) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 18, color: AppColors.primary),
-        const SizedBox(width: 12),
+        Icon(icon, size: 16, color: AppColors.primary),
+        const SizedBox(width: 8),
         Text(
           text,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppColors.textSecondaryDark,
+                color: AppColors.textSecondary,
               ),
         ),
       ],

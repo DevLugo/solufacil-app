@@ -49,12 +49,12 @@ class _ClientSearchBarState extends ConsumerState<ClientSearchBar> {
         // Premium Search Input
         Container(
           decoration: BoxDecoration(
-            color: AppColors.darkSurfaceElevated,
+            color: AppColors.background,
             borderRadius: BorderRadius.circular(AppTheme.radiusMd),
             border: Border.all(
               color: _focusNode.hasFocus
                   ? AppColors.primary
-                  : AppColors.darkBorder.withOpacity(0.5),
+                  : AppColors.border.withOpacity(0.5),
               width: _focusNode.hasFocus ? 2 : 1,
             ),
             boxShadow: _focusNode.hasFocus ? AppTheme.glowPrimary : null,
@@ -67,7 +67,7 @@ class _ClientSearchBarState extends ConsumerState<ClientSearchBar> {
                   Icons.search_rounded,
                   color: _focusNode.hasFocus
                       ? AppColors.primary
-                      : AppColors.textSecondaryDark,
+                      : AppColors.textSecondary,
                   size: 22,
                 ),
               ),
@@ -76,13 +76,13 @@ class _ClientSearchBarState extends ConsumerState<ClientSearchBar> {
                   controller: _controller,
                   focusNode: _focusNode,
                   style: const TextStyle(
-                    color: AppColors.textPrimaryDark,
+                    color: AppColors.secondary,
                     fontSize: 15,
                   ),
                   decoration: InputDecoration(
                     hintText: 'Buscar cliente por nombre o código...',
                     hintStyle: TextStyle(
-                      color: AppColors.textMutedDark,
+                      color: AppColors.textMuted,
                       fontSize: 15,
                     ),
                     border: InputBorder.none,
@@ -102,7 +102,7 @@ class _ClientSearchBarState extends ConsumerState<ClientSearchBar> {
                   padding: const EdgeInsets.only(right: 8),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: AppColors.darkSurfaceHighlight,
+                      color: AppColors.surface,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Material(
@@ -119,7 +119,7 @@ class _ClientSearchBarState extends ConsumerState<ClientSearchBar> {
                           child: Icon(
                             Icons.close_rounded,
                             size: 18,
-                            color: AppColors.textSecondaryDark,
+                            color: AppColors.textSecondary,
                           ),
                         ),
                       ),
@@ -140,10 +140,10 @@ class _ClientSearchBarState extends ConsumerState<ClientSearchBar> {
               child: Container(
                 constraints: const BoxConstraints(maxHeight: 320),
                 decoration: BoxDecoration(
-                  color: AppColors.darkSurfaceElevated.withOpacity(0.95),
+                  color: AppColors.background,
                   borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                   border: Border.all(
-                    color: AppColors.darkBorder.withOpacity(0.5),
+                    color: AppColors.border.withOpacity(0.5),
                   ),
                   boxShadow: AppTheme.shadowLg,
                 ),
@@ -176,7 +176,7 @@ class _ClientSearchBarState extends ConsumerState<ClientSearchBar> {
               Text(
                 'Buscando...',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondaryDark,
+                      color: AppColors.textSecondary,
                     ),
               ),
             ],
@@ -193,7 +193,7 @@ class _ClientSearchBarState extends ConsumerState<ClientSearchBar> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppColors.errorSurface,
+                color: AppColors.errorSurfaceLight,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(
@@ -207,7 +207,7 @@ class _ClientSearchBarState extends ConsumerState<ClientSearchBar> {
               child: Text(
                 searchState.error!,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.errorLight,
+                      color: AppColors.error,
                     ),
               ),
             ),
@@ -225,12 +225,12 @@ class _ClientSearchBarState extends ConsumerState<ClientSearchBar> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.darkSurfaceHighlight,
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(100),
               ),
               child: Icon(
                 Icons.person_search_rounded,
-                color: AppColors.textMutedDark.withOpacity(0.5),
+                color: AppColors.textMuted.withOpacity(0.5),
                 size: 32,
               ),
             ),
@@ -238,14 +238,14 @@ class _ClientSearchBarState extends ConsumerState<ClientSearchBar> {
             Text(
               'No se encontraron clientes',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: AppColors.textSecondaryDark,
+                    color: AppColors.textSecondary,
                   ),
             ),
             const SizedBox(height: 4),
             Text(
               'Intenta con otro nombre o código',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textMutedDark,
+                    color: AppColors.textMuted,
                   ),
             ),
           ],
@@ -260,7 +260,7 @@ class _ClientSearchBarState extends ConsumerState<ClientSearchBar> {
       itemCount: searchState.results.length,
       separatorBuilder: (context, index) => Divider(
         height: 1,
-        color: AppColors.darkDivider,
+        color: AppColors.divider,
         indent: 68,
       ),
       itemBuilder: (context, index) {
@@ -325,7 +325,7 @@ class _ClientResultItem extends StatelessWidget {
                     Text(
                       client.name,
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: AppColors.textPrimaryDark,
+                            color: AppColors.secondary,
                             fontWeight: FontWeight.w600,
                           ),
                       maxLines: 1,
@@ -341,14 +341,14 @@ class _ClientResultItem extends StatelessWidget {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.darkSurfaceHighlight,
+                              color: AppColors.surface,
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
                               client.displayCode!,
                               style:
                                   Theme.of(context).textTheme.labelSmall?.copyWith(
-                                        color: AppColors.textSecondaryDark,
+                                        color: AppColors.textSecondary,
                                         fontWeight: FontWeight.w500,
                                       ),
                             ),
@@ -362,7 +362,7 @@ class _ClientResultItem extends StatelessWidget {
                                 Icon(
                                   Icons.location_on_outlined,
                                   size: 12,
-                                  color: AppColors.textMutedDark,
+                                  color: AppColors.textMuted,
                                 ),
                                 const SizedBox(width: 2),
                                 Expanded(
@@ -372,7 +372,7 @@ class _ClientResultItem extends StatelessWidget {
                                         .textTheme
                                         .bodySmall
                                         ?.copyWith(
-                                          color: AppColors.textMutedDark,
+                                          color: AppColors.textMuted,
                                         ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,

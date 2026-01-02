@@ -1,49 +1,73 @@
 import 'package:flutter/material.dart';
 
-/// Premium Fintech Color System 2025
-/// SoluFácil - Modern, bold, trustworthy
+/// SoluFácil Design System
+/// Based on design-example/tailwind.config.js
+/// Light theme as base, with dark variant
 class AppColors {
   AppColors._();
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // BRAND COLORS - Premium Orange with depth
+  // BRAND COLORS - From design-example
   // ═══════════════════════════════════════════════════════════════════════════
 
-  static const Color primary = Color(0xFFFF6B35);
-  static const Color primaryLight = Color(0xFFFF8F66);
-  static const Color primaryDark = Color(0xFFE55A2B);
-  static const Color primaryMuted = Color(0xFFFF6B35);
+  // Primary - Vibrant Orange
+  static const Color primary = Color(0xFFF15A29);
+  static const Color primaryLight = Color(0xFFFF8A5B);
+  static const Color primaryDark = Color(0xFFC94820);
+  static const Color primaryMuted = Color(0xFFF15A29);
 
-  // Premium gradient colors
-  static const Color gradientStart = Color(0xFFFF6B35);
-  static const Color gradientMiddle = Color(0xFFFF8547);
-  static const Color gradientEnd = Color(0xFFFFAB76);
+  // Secondary - Deep Navy
+  static const Color secondary = Color(0xFF1B1B3A);
+  static const Color secondaryLight = Color(0xFF2D2D4A);
+  static const Color secondaryDark = Color(0xFF121228);
 
-  // Accent - Modern Teal for contrast
-  static const Color accent = Color(0xFF00D4AA);
-  static const Color accentLight = Color(0xFF5FFFDA);
-  static const Color accentDark = Color(0xFF00B894);
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // DARK THEME - Premium Dark Mode
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  static const Color darkBackground = Color(0xFF0A0E17);
-  static const Color darkSurface = Color(0xFF141B2D);
-  static const Color darkSurfaceElevated = Color(0xFF1C2438);
-  static const Color darkSurfaceHighlight = Color(0xFF252D44);
-  static const Color darkBorder = Color(0xFF2A3347);
-  static const Color darkDivider = Color(0xFF1E2636);
+  // Premium gradient colors for onboarding
+  static const Color gradientOrange = Color(0xFFF15A29);
+  static const Color gradientBlue = Color(0xFF2563EB);
+  static const Color gradientGreen = Color(0xFF059669);
+  static const Color gradientPurple = Color(0xFF7C3AED);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // LIGHT THEME - Clean & Professional
+  // LIGHT THEME (BASE) - From design-example
   // ═══════════════════════════════════════════════════════════════════════════
 
-  static const Color lightBackground = Color(0xFFF7F9FC);
-  static const Color lightSurface = Color(0xFFFFFFFF);
-  static const Color lightSurfaceElevated = Color(0xFFFFFFFF);
-  static const Color lightBorder = Color(0xFFE8ECF4);
-  static const Color lightDivider = Color(0xFFF0F3F8);
+  static const Color surface = Color(0xFFF9FAFB);
+  static const Color background = Color(0xFFFFFFFF);
+  static const Color border = Color(0xFFE5E7EB);
+  static const Color divider = Color(0xFFF3F4F6);
+
+  // Text colors for light theme
+  static const Color textPrimary = Color(0xFF1B1B3A);
+  static const Color textSecondary = Color(0xFF6B7280);
+  static const Color textMuted = Color(0xFF9CA3AF);
+  static const Color textDisabled = Color(0xFFD1D5DB);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DARK THEME VARIANT
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  static const Color darkBackground = Color(0xFF0F0F23);
+  static const Color darkSurface = Color(0xFF1B1B3A);
+  static const Color darkSurfaceElevated = Color(0xFF2D2D4A);
+  static const Color darkSurfaceHighlight = Color(0xFF3D3D5C);
+  static const Color darkBorder = Color(0xFF3D3D5C);
+  static const Color darkDivider = Color(0xFF2D2D4A);
+
+  // Text colors for dark theme
+  static const Color textPrimaryDark = Color(0xFFF9FAFB);
+  static const Color textSecondaryDark = Color(0xFF9CA3AF);
+  static const Color textMutedDark = Color(0xFF6B7280);
+  static const Color textDisabledDark = Color(0xFF4B5563);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LEGACY ALIASES (for backward compatibility)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  static const Color lightBackground = surface;
+  static const Color lightSurface = background;
+  static const Color lightSurfaceElevated = background;
+  static const Color lightBorder = border;
+  static const Color lightDivider = divider;
 
   // ═══════════════════════════════════════════════════════════════════════════
   // SEMANTIC COLORS - Status & Feedback
@@ -78,40 +102,26 @@ class AppColors {
   static const Color infoSurfaceLight = Color(0xFFDBEAFE);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // TEXT COLORS
+  // TEXT COLORS - Additional
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // Dark theme text
-  static const Color textPrimaryDark = Color(0xFFF8FAFC);
-  static const Color textSecondaryDark = Color(0xFF94A3B8);
-  static const Color textMutedDark = Color(0xFF64748B);
-  static const Color textDisabledDark = Color(0xFF475569);
-
-  // Light theme text
-  static const Color textPrimaryLight = Color(0xFF0F172A);
-  static const Color textSecondaryLight = Color(0xFF475569);
-  static const Color textMutedLight = Color(0xFF94A3B8);
-  static const Color textDisabledLight = Color(0xFFCBD5E1);
+  // Light theme text (aliases)
+  static const Color textPrimaryLight = textPrimary;
+  static const Color textSecondaryLight = textSecondary;
+  static const Color textMutedLight = textMuted;
+  static const Color textDisabledLight = textDisabled;
 
   // On primary (always white for contrast)
   static const Color textOnPrimary = Color(0xFFFFFFFF);
-  static const Color textOnAccent = Color(0xFF0A0E17);
+  static const Color textOnSecondary = Color(0xFFFFFFFF);
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // LEGACY ALIASES (for backward compatibility)
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  static const Color secondary = darkSurface;
-  static const Color secondaryLight = darkSurfaceElevated;
-  static const Color secondaryDark = darkBackground;
-  static const Color background = lightBackground;
-  static const Color surface = lightSurface;
+  // Surface variant
   static const Color surfaceVariant = Color(0xFFF1F5F9);
-  static const Color border = lightBorder;
-  static const Color divider = lightDivider;
-  static const Color textPrimary = textPrimaryLight;
-  static const Color textSecondary = textSecondaryLight;
-  static const Color textMuted = textMutedLight;
+
+  // Accent - For special highlights
+  static const Color accent = primary;
+  static const Color accentLight = primaryLight;
+  static const Color accentDark = primaryDark;
 
   // ═══════════════════════════════════════════════════════════════════════════
   // LOAN STATUS COLORS - Premium indicators
@@ -136,46 +146,66 @@ class AppColors {
   static const Color paymentCovered = info;
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // GRADIENTS - Premium visual effects
+  // GRADIENTS - From design-example onboarding
   // ═══════════════════════════════════════════════════════════════════════════
 
+  // Onboarding gradients (from Onboarding.tsx)
+  static const LinearGradient onboardingOrange = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xE6F97316), Color(0xE6EA580C)], // orange-500/90 to orange-600/90
+  );
+
+  static const LinearGradient onboardingBlue = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xE62563EB), Color(0xE61D4ED8)], // blue-600/90 to blue-700/90
+  );
+
+  static const LinearGradient onboardingGreen = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xE6059669), Color(0xE6047857)], // green-600/90 to green-700/90
+  );
+
+  static const LinearGradient onboardingPurple = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xE69333EA), Color(0xE67C3AED)], // purple-600/90 to purple-700/90
+  );
+
+  static const LinearGradient onboardingNavy = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xE61B1B3A), Color(0xE62D2D4A)], // secondary/90 to secondary-light/90
+  );
+
+  // Dashboard welcome card gradient
+  static const LinearGradient welcomeCardGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [secondary, secondaryLight],
+  );
+
+  // Primary gradient
   static const LinearGradient primaryGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [gradientStart, gradientEnd],
+    colors: [primary, primaryDark],
   );
 
-  static const LinearGradient primaryGradientVertical = LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [gradientStart, gradientMiddle, gradientEnd],
-  );
-
-  static const LinearGradient accentGradient = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [accent, accentLight],
-  );
-
-  static const LinearGradient darkGradient = LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [darkSurfaceElevated, darkBackground],
-  );
-
+  // Success gradient
   static const LinearGradient successGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [success, successLight],
   );
 
-  static const LinearGradient cardGradient = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [
-      Color(0xFF1C2438),
-      Color(0xFF141B2D),
-    ],
+  // Dark theme gradient
+  static const LinearGradient darkGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [darkSurfaceElevated, darkBackground],
   );
 
   // ═══════════════════════════════════════════════════════════════════════════

@@ -126,6 +126,9 @@ class ClientSummary extends Equatable {
       }
     }
 
+    // Calculate average missed payments per loan
+    final avgMissed = _calculateAvgMissedPayments(loansAsClient);
+
     return ClientSummary(
       totalLoansAsClient: loansAsClient.length,
       totalLoansAsCollateral: loansAsCollateral.length,
@@ -137,8 +140,81 @@ class ClientSummary extends Equatable {
       hasBeenClient: loansAsClient.isNotEmpty,
       hasBeenCollateral: loansAsCollateral.isNotEmpty,
       firstLoanDate: firstDate,
-      avgMissedPaymentsPerLoan: 0, // TODO: Calculate from payment data
+      avgMissedPaymentsPerLoan: avgMissed,
     );
+  }
+
+  /// Calculate average missed payments per loan
+  /// A missed week is one where no payment was made AND surplus didn't cover it
+  static double _calculateAvgMissedPayments(List<Loan> loans) {
+    if (loans.isEmpty) return 0;
+
+    int totalMissedWeeks = 0;
+    int totalLoansWithWeeks = 0;
+
+    for (final loan in loans) {
+      final weekDuration = loan.weekDuration ?? 20;
+      final expectedWeekly = loan.expectedWeeklyPayment;
+      final now = DateTime.now();
+
+      // Only count weeks that are in the past
+      final isFinished = loan.status == LoanStatus.finished;
+      final isRenewed = loan.wasRenewed;
+      final finishedDate = loan.finishedDate;
+
+      // Determine how many weeks to evaluate
+      int weeksToEvaluate = weekDuration;
+      if (finishedDate != null && isFinished) {
+        final weeksToFinish = ((finishedDate.difference(loan.signDate).inDays) / 7).ceil();
+        weeksToEvaluate = weeksToFinish.clamp(1, weekDuration);
+      }
+
+      // Group payments by week number
+      final paymentsByWeek = <int, double>{};
+      for (final payment in loan.payments) {
+        final daysSinceSign = payment.receivedAt.difference(loan.signDate).inDays;
+        final weekNumber = (daysSinceSign / 7).floor() + 1;
+        paymentsByWeek[weekNumber] = (paymentsByWeek[weekNumber] ?? 0) + payment.amount;
+      }
+
+      int missedWeeksForLoan = 0;
+
+      for (int week = 1; week <= weeksToEvaluate; week++) {
+        final weekEndDate = loan.signDate.add(Duration(days: week * 7));
+
+        // Skip future weeks
+        if (weekEndDate.isAfter(now)) continue;
+
+        // Don't count after finish/renewal
+        if ((isFinished || isRenewed) && finishedDate != null && weekEndDate.isAfter(finishedDate)) {
+          continue;
+        }
+
+        final paid = paymentsByWeek[week] ?? 0;
+
+        // Calculate surplus before this week
+        double paidBeforeWeek = 0;
+        for (int w = 1; w < week; w++) {
+          paidBeforeWeek += paymentsByWeek[w] ?? 0;
+        }
+        final expectedBefore = (week - 1) * expectedWeekly;
+        final surplusBefore = paidBeforeWeek - expectedBefore;
+
+        // Check if this week is covered by surplus + current payment
+        final coversWithSurplus = surplusBefore + paid >= expectedWeekly && expectedWeekly > 0;
+
+        // Count as missed if no payment and surplus doesn't cover
+        if (paid == 0 && !coversWithSurplus) {
+          missedWeeksForLoan++;
+        }
+      }
+
+      totalMissedWeeks += missedWeeksForLoan;
+      totalLoansWithWeeks++;
+    }
+
+    if (totalLoansWithWeeks == 0) return 0;
+    return totalMissedWeeks / totalLoansWithWeeks;
   }
 
   @override

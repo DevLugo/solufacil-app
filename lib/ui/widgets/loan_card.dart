@@ -20,7 +20,7 @@ class LoanCard extends StatelessWidget {
       case LoanStatus.active:
         return AppColors.success;
       case LoanStatus.finished:
-        return AppColors.textMutedDark;
+        return AppColors.textMuted;
       case LoanStatus.renovated:
         return AppColors.info;
       case LoanStatus.cancelled:
@@ -31,13 +31,13 @@ class LoanCard extends StatelessWidget {
   Color get _statusBgColor {
     switch (loan.status) {
       case LoanStatus.active:
-        return AppColors.successSurface;
+        return AppColors.success.withOpacity(0.1);
       case LoanStatus.finished:
-        return AppColors.darkSurfaceHighlight;
+        return AppColors.surface;
       case LoanStatus.renovated:
-        return AppColors.infoSurface;
+        return AppColors.info.withOpacity(0.1);
       case LoanStatus.cancelled:
-        return AppColors.errorSurface;
+        return AppColors.error.withOpacity(0.1);
     }
   }
 
@@ -46,11 +46,18 @@ class LoanCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.darkSurfaceElevated,
+        color: AppColors.background,
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         border: Border.all(
-          color: AppColors.darkBorder.withOpacity(0.5),
+          color: AppColors.border.withOpacity(0.5),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.secondary.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Material(
         color: Colors.transparent,
@@ -69,13 +76,13 @@ class LoanCard extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppColors.darkSurfaceHighlight,
+                        color: AppColors.surface,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
                         Icons.calendar_today_rounded,
                         size: 16,
-                        color: AppColors.textSecondaryDark,
+                        color: AppColors.textSecondary,
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -85,7 +92,7 @@ class LoanCard extends StatelessWidget {
                         Text(
                           Formatters.dateShort(loan.signDate),
                           style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                color: AppColors.textPrimaryDark,
+                                color: AppColors.secondary,
                                 fontWeight: FontWeight.w600,
                               ),
                         ),
@@ -93,7 +100,7 @@ class LoanCard extends StatelessWidget {
                           Text(
                             '${loan.weeksSinceSign}/${loan.weekDuration} semanas',
                             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                  color: AppColors.textMutedDark,
+                                  color: AppColors.textMuted,
                                 ),
                           ),
                       ],
@@ -115,7 +122,7 @@ class LoanCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: AppColors.darkSurfaceHighlight.withOpacity(0.5),
+                      color: AppColors.surface,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -123,7 +130,7 @@ class LoanCard extends StatelessWidget {
                         Icon(
                           isCollateral ? Icons.person_rounded : Icons.verified_user_rounded,
                           size: 16,
-                          color: isCollateral ? AppColors.primary : AppColors.accent,
+                          color: isCollateral ? AppColors.primary : AppColors.info,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
@@ -132,7 +139,7 @@ class LoanCard extends StatelessWidget {
                                 ? 'Cliente: ${loan.borrowerName}'
                                 : 'Aval: ${loan.collateralNames.join(", ")}',
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: AppColors.textSecondaryDark,
+                                  color: AppColors.textSecondary,
                                 ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -151,9 +158,9 @@ class LoanCard extends StatelessWidget {
                     Expanded(
                       child: _AmountCard(
                         label: 'Prestado',
-                        amount: loan.amountGived,
+                        amount: loan.requestedAmount,
                         icon: Icons.arrow_upward_rounded,
-                        iconColor: AppColors.textSecondaryDark,
+                        iconColor: AppColors.textSecondary,
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -193,7 +200,7 @@ class LoanCard extends StatelessWidget {
                       child: Container(
                         height: 40,
                         decoration: BoxDecoration(
-                          color: AppColors.darkSurfaceHighlight,
+                          color: AppColors.primary.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Material(
@@ -329,7 +336,7 @@ class _AmountCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.darkSurfaceHighlight.withOpacity(0.5),
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -342,7 +349,7 @@ class _AmountCard extends StatelessWidget {
               Text(
                 label,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: AppColors.textMutedDark,
+                      color: AppColors.textMuted,
                     ),
               ),
             ],
@@ -351,7 +358,7 @@ class _AmountCard extends StatelessWidget {
           Text(
             Formatters.currencyCompact(amount),
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: valueColor ?? AppColors.textPrimaryDark,
+                  color: valueColor ?? AppColors.secondary,
                   fontWeight: FontWeight.w700,
                 ),
           ),
@@ -390,7 +397,7 @@ class _ProgressSection extends StatelessWidget {
                 Text(
                   'Progreso de pago',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: AppColors.textSecondaryDark,
+                        color: AppColors.textSecondary,
                       ),
                 ),
               ],
@@ -399,8 +406,8 @@ class _ProgressSection extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
                 color: isComplete
-                    ? AppColors.successSurface
-                    : AppColors.primary.withOpacity(0.15),
+                    ? AppColors.success.withOpacity(0.1)
+                    : AppColors.primary.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(100),
               ),
               child: Text(
@@ -422,7 +429,7 @@ class _ProgressSection extends StatelessWidget {
               Container(
                 height: 6,
                 decoration: BoxDecoration(
-                  color: AppColors.darkSurfaceHighlight,
+                  color: AppColors.border.withOpacity(0.5),
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),

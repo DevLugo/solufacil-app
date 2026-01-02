@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../core/theme/colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../data/models/loan.dart';
@@ -55,20 +56,17 @@ class PaymentHistorySheet extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(
-                          Icons.receipt_long_outlined,
-                          color: AppColors.primary,
-                        ),
-                        const SizedBox(width: 8),
                         Text(
                           'Historial de Pagos',
-                          style: Theme.of(context).textTheme.titleLarge,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Préstamo del ${Formatters.dateShort(loan.signDate)}',
+                      '${Formatters.dateShort(loan.signDate)} • ${loan.weekDuration ?? 0} semanas',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: AppColors.textMuted,
                           ),
@@ -77,59 +75,105 @@ class PaymentHistorySheet extends StatelessWidget {
                 ),
               ),
 
-              const Divider(height: 1),
-
-              // Summary row
-              Container(
-                padding: const EdgeInsets.all(16),
-                color: AppColors.surfaceVariant,
+              // 4 KPIs matching web: prestado, deuda, pagado, debe
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
                   children: [
-                    _SummaryItem(
-                      label: 'Total',
+                    _KpiCard(
+                      value: Formatters.currencyCompact(loan.requestedAmount),
+                      label: 'prestado',
+                      valueColor: AppColors.success,
+                    ),
+                    const SizedBox(width: 6),
+                    _KpiCard(
                       value: Formatters.currencyCompact(loan.totalAmountDue),
+                      label: 'deuda',
                     ),
-                    _SummaryItem(
-                      label: 'Pagado',
+                    const SizedBox(width: 6),
+                    _KpiCard(
                       value: Formatters.currencyCompact(loan.totalPaid),
-                      color: AppColors.success,
+                      label: 'pagado',
+                      valueColor: AppColors.success,
                     ),
-                    _SummaryItem(
-                      label: 'Pendiente',
+                    const SizedBox(width: 6),
+                    _KpiCard(
                       value: Formatters.currencyCompact(loan.pendingDebt),
-                      color: loan.pendingDebt > 0 ? AppColors.error : AppColors.success,
+                      label: 'debe',
+                      valueColor: loan.pendingDebt > 0 ? AppColors.error : AppColors.success,
                     ),
                   ],
                 ),
               ),
 
-              // Table header
+              // Interest rate and weeks info
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Interés: ',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: AppColors.textMuted,
+                          ),
+                    ),
+                    Text(
+                      '${((loan.rate ?? 0) * 100).round()}%',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    Text(
+                      ' • ',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: AppColors.textMuted,
+                          ),
+                    ),
+                    Text(
+                      '${loan.weekDuration ?? 0}',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    Text(
+                      ' semanas',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: AppColors.textMuted,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Table header - 4 columns: #, Fecha, Pagado, Deuda
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceVariant,
                   border: Border(
+                    top: BorderSide(color: AppColors.border),
                     bottom: BorderSide(color: AppColors.border),
                   ),
                 ),
                 child: Row(
                   children: [
                     SizedBox(
-                      width: 40,
+                      width: 28,
                       child: Text(
-                        'Sem',
+                        '#',
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                               fontWeight: FontWeight.bold,
                             ),
                       ),
                     ),
                     Expanded(
+                      flex: 2,
                       child: Text(
-                        'Esperado',
+                        'Fecha',
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                               fontWeight: FontWeight.bold,
                             ),
-                        textAlign: TextAlign.center,
                       ),
                     ),
                     Expanded(
@@ -138,17 +182,16 @@ class PaymentHistorySheet extends StatelessWidget {
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                               fontWeight: FontWeight.bold,
                             ),
-                        textAlign: TextAlign.center,
+                        textAlign: TextAlign.right,
                       ),
                     ),
-                    SizedBox(
-                      width: 40,
+                    Expanded(
                       child: Text(
-                        'Est',
+                        'Deuda',
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                               fontWeight: FontWeight.bold,
                             ),
-                        textAlign: TextAlign.center,
+                        textAlign: TextAlign.right,
                       ),
                     ),
                   ],
@@ -163,10 +206,22 @@ class PaymentHistorySheet extends StatelessWidget {
                   itemCount: chronology.length,
                   itemBuilder: (context, index) {
                     final item = chronology[index];
-                    return _PaymentRow(item: item);
+                    return _PaymentRow(item: item, expectedWeekly: item.expectedAmount);
                   },
                 ),
               ),
+
+              // Empty state
+              if (chronology.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Text(
+                    'Sin pagos registrados',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppColors.textMuted,
+                        ),
+                  ),
+                ),
             ],
           ),
         );
@@ -174,62 +229,134 @@ class PaymentHistorySheet extends StatelessWidget {
     );
   }
 
+  /// Helper to get Monday of the week containing a date
+  DateTime _getWeekMonday(DateTime date) {
+    final dayOfWeek = date.weekday; // 1 = Monday, 7 = Sunday
+    return DateTime(date.year, date.month, date.day - (dayOfWeek - 1));
+  }
+
+  /// Helper to get Sunday of the week containing a date
+  DateTime _getWeekSunday(DateTime monday) {
+    return DateTime(monday.year, monday.month, monday.day + 6, 23, 59, 59, 999);
+  }
+
+  /// Generates payment chronology matching web logic exactly
+  /// Uses calendar weeks (Monday-Sunday) for payment assignment
   List<PaymentChronologyItem> _generatePaymentChronology() {
     final items = <PaymentChronologyItem>[];
-    final weekDuration = loan.weekDuration ?? 20;
-    final expectedWeekly = loan.expectedWeeklyPayment;
+    final weekDuration = loan.weekDuration ?? 16;
 
-    // Group payments by week
-    final paymentsByWeek = <int, double>{};
-    for (final payment in loan.payments) {
-      final weekNumber = ((payment.receivedAt.difference(loan.signDate).inDays) / 7).floor() + 1;
-      paymentsByWeek[weekNumber] = (paymentsByWeek[weekNumber] ?? 0) + payment.amount;
+    // Match web: totalDue = loan.totalAmountDue ?? (amountGived + profitAmount)
+    final totalDue = loan.totalAmountDue > 0
+        ? loan.totalAmountDue
+        : (loan.requestedAmount + loan.profitAmount);
+
+    // Match web: expectedWeekly = totalDue / weekDuration
+    final expectedWeekly = weekDuration > 0 ? totalDue / weekDuration : 0.0;
+    final now = DateTime.now();
+
+    // Check if loan is finished or renewed
+    final isFinished = loan.status == LoanStatus.finished;
+    final isRenewed = loan.wasRenewed;
+    final finishedDate = loan.finishedDate;
+
+    // Determine how many weeks to show
+    int totalWeeks = weekDuration;
+    if (finishedDate != null && isFinished) {
+      final weeksToFinish = ((finishedDate.difference(loan.signDate).inDays) / 7).ceil();
+      totalWeeks = weeksToFinish.clamp(1, weekDuration);
     }
 
-    double runningBalance = loan.totalAmountDue;
-    double surplus = 0;
+    // Sort payments by date
+    final sortedPayments = [...loan.payments]..sort(
+        (a, b) => a.receivedAt.compareTo(b.receivedAt),
+      );
 
-    for (int week = 1; week <= weekDuration; week++) {
-      final paid = paymentsByWeek[week] ?? 0;
-      final coverageType = _getCoverageType(paid, expectedWeekly, surplus);
+    // Track running balance
+    double runningBalance = totalDue;
 
-      // Update surplus
-      if (paid > expectedWeekly) {
-        surplus += paid - expectedWeekly;
-      } else if (paid < expectedWeekly && surplus > 0) {
-        final needed = expectedWeekly - paid;
-        if (surplus >= needed) {
-          surplus -= needed;
-        } else {
-          surplus = 0;
+    for (int week = 1; week <= totalWeeks; week++) {
+      // Calculate weekPaymentDate = signDate + (week * 7) days
+      // This is the "due date" for week N
+      final weekPaymentDate = loan.signDate.add(Duration(days: week * 7));
+
+      // Get the calendar week (Monday-Sunday) containing weekPaymentDate
+      final weekMonday = _getWeekMonday(weekPaymentDate);
+      final weekSunday = _getWeekSunday(weekMonday);
+
+      // Find all payments in this calendar week
+      final paymentsInWeek = sortedPayments.where((p) {
+        final paymentDate = DateTime(p.receivedAt.year, p.receivedAt.month, p.receivedAt.day);
+        final mondayDate = DateTime(weekMonday.year, weekMonday.month, weekMonday.day);
+        final sundayDate = DateTime(weekSunday.year, weekSunday.month, weekSunday.day);
+        return !paymentDate.isBefore(mondayDate) && !paymentDate.isAfter(sundayDate);
+      }).toList();
+
+      // Calculate paid before this week (all payments before weekMonday)
+      final paidBeforeWeek = sortedPayments
+          .where((p) => p.receivedAt.isBefore(weekMonday))
+          .fold<double>(0, (sum, p) => sum + p.amount);
+
+      // Calculate weekly paid
+      final weeklyPaid = paymentsInWeek.fold<double>(0, (sum, p) => sum + p.amount);
+
+      // Calculate surplus before this week
+      final expectedBefore = (week - 1) * expectedWeekly;
+      final surplusBefore = paidBeforeWeek - expectedBefore;
+
+      // Check if this week is covered by surplus + current payment
+      final coversWithSurplus =
+          surplusBefore + weeklyPaid >= expectedWeekly && expectedWeekly > 0;
+
+      // Determine coverage type (same logic as web)
+      CoverageType coverageType;
+      if (weeklyPaid >= expectedWeekly && expectedWeekly > 0) {
+        coverageType = CoverageType.full;
+      } else if (coversWithSurplus && weeklyPaid > 0) {
+        coverageType = CoverageType.coveredBySurplus;
+      } else if (coversWithSurplus && weeklyPaid == 0) {
+        coverageType = CoverageType.coveredBySurplus;
+      } else if (weeklyPaid > 0) {
+        coverageType = CoverageType.partial;
+      } else {
+        coverageType = CoverageType.miss;
+      }
+
+      // Don't show NO_PAYMENT after finish/renewal or for future weeks
+      if (weeklyPaid == 0 && !coversWithSurplus) {
+        if (isFinished || isRenewed) {
+          continue; // Skip this week entirely
+        }
+        if (weekSunday.isAfter(now)) {
+          coverageType = CoverageType.upcoming;
         }
       }
 
-      runningBalance -= paid;
+      // Update running balance
+      runningBalance -= weeklyPaid;
       if (runningBalance < 0) runningBalance = 0;
+
+      // Get date to display (payment date if payment exists, otherwise weekPaymentDate)
+      DateTime displayDate;
+      if (paymentsInWeek.isNotEmpty) {
+        displayDate = paymentsInWeek.first.receivedAt;
+      } else {
+        displayDate = weekPaymentDate;
+      }
 
       items.add(PaymentChronologyItem(
         weekNumber: week,
         expectedAmount: expectedWeekly,
-        paidAmount: paid,
+        paidAmount: weeklyPaid,
         balance: runningBalance,
         coverageType: coverageType,
+        surplusBefore: surplusBefore,
+        surplusAfter: surplusBefore + weeklyPaid - expectedWeekly,
+        date: displayDate,
       ));
     }
 
     return items;
-  }
-
-  CoverageType _getCoverageType(double paid, double expected, double surplus) {
-    if (paid >= expected) {
-      return CoverageType.full;
-    } else if (paid > 0) {
-      return CoverageType.partial;
-    } else if (surplus >= expected) {
-      return CoverageType.coveredBySurplus;
-    } else {
-      return CoverageType.miss;
-    }
   }
 }
 
@@ -238,6 +365,7 @@ enum CoverageType {
   partial,
   miss,
   coveredBySurplus,
+  upcoming,
 }
 
 class PaymentChronologyItem {
@@ -246,6 +374,9 @@ class PaymentChronologyItem {
   final double paidAmount;
   final double balance;
   final CoverageType coverageType;
+  final double surplusBefore;
+  final double surplusAfter;
+  final DateTime date;
 
   PaymentChronologyItem({
     required this.weekNumber,
@@ -253,40 +384,53 @@ class PaymentChronologyItem {
     required this.paidAmount,
     required this.balance,
     required this.coverageType,
+    this.surplusBefore = 0,
+    this.surplusAfter = 0,
+    required this.date,
   });
 }
 
-class _SummaryItem extends StatelessWidget {
-  final String label;
+class _KpiCard extends StatelessWidget {
   final String value;
-  final Color? color;
+  final String label;
+  final Color? valueColor;
 
-  const _SummaryItem({
-    required this.label,
+  const _KpiCard({
     required this.value,
-    this.color,
+    required this.label,
+    this.valueColor,
   });
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppColors.textMuted,
-                ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: color ?? AppColors.textPrimary,
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-        ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceVariant,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: valueColor ?? AppColors.textPrimary,
+                  ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: AppColors.textMuted,
+                    fontSize: 10,
+                  ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -294,94 +438,124 @@ class _SummaryItem extends StatelessWidget {
 
 class _PaymentRow extends StatelessWidget {
   final PaymentChronologyItem item;
+  final double expectedWeekly;
 
-  const _PaymentRow({required this.item});
+  const _PaymentRow({
+    required this.item,
+    required this.expectedWeekly,
+  });
 
-  Color get _backgroundColor {
+  Color get _rowColor {
     switch (item.coverageType) {
       case CoverageType.full:
-        return AppColors.successLight;
+        // Overpaid: paid >= 1.5x expected
+        if (item.paidAmount >= expectedWeekly * 1.5 && expectedWeekly > 0) {
+          return AppColors.success.withOpacity(0.1);
+        }
+        return Colors.transparent;
       case CoverageType.partial:
-        return AppColors.warningLight;
+        return AppColors.warning.withOpacity(0.1);
       case CoverageType.miss:
-        return AppColors.errorLight;
+        return AppColors.error.withOpacity(0.1);
       case CoverageType.coveredBySurplus:
-        return AppColors.infoLight;
+        return AppColors.info.withOpacity(0.1);
+      case CoverageType.upcoming:
+        return Colors.transparent;
     }
   }
 
-  Color get _statusColor {
+  Color get _borderColor {
     switch (item.coverageType) {
       case CoverageType.full:
-        return AppColors.success;
+        if (item.paidAmount >= expectedWeekly * 1.5 && expectedWeekly > 0) {
+          return AppColors.success;
+        }
+        return Colors.transparent;
       case CoverageType.partial:
         return AppColors.warning;
       case CoverageType.miss:
         return AppColors.error;
       case CoverageType.coveredBySurplus:
         return AppColors.info;
-    }
-  }
-
-  IconData get _statusIcon {
-    switch (item.coverageType) {
-      case CoverageType.full:
-        return Icons.check_circle;
-      case CoverageType.partial:
-        return Icons.remove_circle;
-      case CoverageType.miss:
-        return Icons.cancel;
-      case CoverageType.coveredBySurplus:
-        return Icons.swap_horiz;
+      case CoverageType.upcoming:
+        return Colors.transparent;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isNoPayment = item.paidAmount == 0;
+    final showBorder = _borderColor != Colors.transparent;
+    final dateFormatter = DateFormat('dd/MM/yy');
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: _backgroundColor.withOpacity(0.3),
+        color: _rowColor,
         border: Border(
-          bottom: BorderSide(color: AppColors.border),
+          left: showBorder
+              ? BorderSide(color: _borderColor, width: 4)
+              : BorderSide.none,
+          bottom: BorderSide(color: AppColors.border.withOpacity(0.5)),
         ),
       ),
       child: Row(
         children: [
+          // Week number
           SizedBox(
-            width: 40,
+            width: 28,
             child: Text(
               '${item.weekNumber}',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w500,
+                    color: AppColors.textMuted,
                   ),
             ),
           ),
+          // Date
           Expanded(
+            flex: 2,
             child: Text(
-              Formatters.currencyCompact(item.expectedAmount),
-              style: Theme.of(context).textTheme.bodyMedium,
-              textAlign: TextAlign.center,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              item.paidAmount > 0
-                  ? Formatters.currencyCompact(item.paidAmount)
-                  : '-',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: item.paidAmount > 0 ? _statusColor : AppColors.textMuted,
-                    fontWeight: item.paidAmount > 0 ? FontWeight.w500 : null,
+              dateFormatter.format(item.date),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textMuted,
                   ),
-              textAlign: TextAlign.center,
             ),
           ),
-          SizedBox(
-            width: 40,
-            child: Icon(
-              _statusIcon,
-              color: _statusColor,
-              size: 20,
+          // Paid amount
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  isNoPayment ? '-' : Formatters.currencyCompact(item.paidAmount),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: isNoPayment ? null : FontWeight.w500,
+                        color: isNoPayment ? AppColors.textMuted : null,
+                        fontStyle: isNoPayment ? FontStyle.italic : null,
+                      ),
+                ),
+                // Show "cubierto" indicator for covered by surplus
+                if (item.coverageType == CoverageType.coveredBySurplus && isNoPayment)
+                  Text(
+                    'cubierto',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: AppColors.info,
+                          fontSize: 9,
+                        ),
+                  ),
+              ],
+            ),
+          ),
+          // Debt after payment
+          Expanded(
+            child: Text(
+              Formatters.currencyCompact(item.balance),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: item.balance == 0 ? AppColors.success : AppColors.error,
+                  ),
+              textAlign: TextAlign.right,
             ),
           ),
         ],

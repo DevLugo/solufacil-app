@@ -25,15 +25,26 @@ dependencies:
   shared_preferences: ^2.2.2
   path_provider: ^2.1.1
 
+  # Navigation
+  go_router: ^13.0.0
+
   # UI
   google_fonts: ^5.1.0
   flutter_svg: ^2.0.9
   shimmer: ^3.0.0
+  flutter_animate: ^4.3.0
+  lucide_icons: ^0.257.0
+
+  # Camera & Media (for INE scan and video recording)
+  camera: ^0.10.5+9
+  image_picker: ^1.0.7
+  video_player: ^2.8.2
 
   # Utils
   intl: ^0.18.1
   equatable: ^2.0.5
   uuid: ^4.2.2
+  decimal: ^2.3.3
 
   # Icons
   cupertino_icons: ^1.0.6

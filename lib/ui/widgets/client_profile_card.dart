@@ -10,6 +10,7 @@ class ClientProfileCard extends StatelessWidget {
   final ClientHistory? history;
   final bool isLoading;
   final VoidCallback onClear;
+  final bool showHeader;
 
   const ClientProfileCard({
     super.key,
@@ -17,121 +18,123 @@ class ClientProfileCard extends StatelessWidget {
     this.history,
     this.isLoading = false,
     required this.onClear,
+    this.showHeader = true,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.darkSurfaceElevated,
+        color: AppColors.background,
         borderRadius: BorderRadius.circular(AppTheme.radiusXl),
         border: Border.all(
-          color: AppColors.darkBorder.withOpacity(0.5),
+          color: AppColors.border.withOpacity(0.5),
         ),
       ),
       child: Column(
         children: [
-          // Header with gradient background
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppColors.primary.withOpacity(0.15),
-                  AppColors.accent.withOpacity(0.05),
-                ],
-              ),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(AppTheme.radiusXl - 1),
-              ),
-            ),
-            child: Row(
-              children: [
-                // Premium Avatar
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    gradient: AppColors.primaryGradient,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: AppTheme.glowPrimary,
-                  ),
-                  child: Center(
-                    child: Text(
-                      client.name.isNotEmpty ? client.name[0].toUpperCase() : '?',
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                  ),
+          // Header with gradient background (conditional)
+          if (showHeader)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppColors.primary.withOpacity(0.15),
+                    AppColors.accent.withOpacity(0.05),
+                  ],
                 ),
-                const SizedBox(width: 16),
-
-                // Name and code
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        client.name,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              color: AppColors.textPrimaryDark,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(AppTheme.radiusXl - 1),
+                ),
+              ),
+              child: Row(
+                children: [
+                  // Premium Avatar
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      gradient: AppColors.primaryGradient,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: AppTheme.glowPrimary,
+                    ),
+                    child: Center(
+                      child: Text(
+                        client.name.isNotEmpty ? client.name[0].toUpperCase() : '?',
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                              color: Colors.white,
                               fontWeight: FontWeight.w700,
                             ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
-                      if (client.displayCode != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.darkSurfaceHighlight,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            client.displayCode!,
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                  color: AppColors.textSecondaryDark,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                          ),
-                        ),
-                    ],
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 16),
 
-                // Close button
-                Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.darkSurfaceHighlight,
-                    borderRadius: BorderRadius.circular(10),
+                  // Name and code
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          client.name,
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                color: AppColors.secondary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        if (client.displayCode != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.surface,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              client.displayCode!,
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: AppColors.textSecondary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: onClear,
+
+                  // Close button
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
                       borderRadius: BorderRadius.circular(10),
-                      child: const Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Icon(
-                          Icons.close_rounded,
-                          size: 20,
-                          color: AppColors.textSecondaryDark,
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: onClear,
+                        borderRadius: BorderRadius.circular(10),
+                        child: const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Icon(
+                            Icons.close_rounded,
+                            size: 20,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
 
           // Contact info
           if (client.phone != null || client.address != null)
@@ -140,7 +143,7 @@ class ClientProfileCard extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppColors.darkSurfaceHighlight.withOpacity(0.5),
+                  color: AppColors.surface,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
@@ -180,8 +183,8 @@ class ClientProfileCard extends StatelessWidget {
 
   Widget _buildLoadingSkeleton(BuildContext context) {
     return Shimmer.fromColors(
-      baseColor: AppColors.darkSurfaceHighlight,
-      highlightColor: AppColors.darkSurfaceElevated,
+      baseColor: AppColors.surface,
+      highlightColor: AppColors.background,
       child: Row(
         children: [
           Expanded(
@@ -264,9 +267,8 @@ class ClientProfileCard extends StatelessWidget {
                 icon: summary.avgMissedPaymentsPerLoan == 0
                     ? Icons.check_circle_rounded
                     : Icons.warning_amber_rounded,
-                label: 'Pagos faltados',
-                value: summary.avgMissedPaymentsPerLoan.toStringAsFixed(1),
-                subtitle: 'promedio',
+                label: 'Faltas prom.',
+                value: summary.avgMissedPaymentsPerLoan.toStringAsFixed(0),
                 color: summary.avgMissedPaymentsPerLoan == 0
                     ? AppColors.success
                     : summary.avgMissedPaymentsPerLoan <= 2
@@ -310,7 +312,7 @@ class _InfoRow extends StatelessWidget {
           child: Text(
             text,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textPrimaryDark,
+                  color: AppColors.secondary,
                 ),
           ),
         ),
@@ -343,7 +345,7 @@ class _StatCard extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(compact ? 12 : 16),
       decoration: BoxDecoration(
-        color: AppColors.darkSurfaceHighlight.withOpacity(0.5),
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
         border: isActive
             ? Border.all(color: color.withOpacity(0.3), width: 1.5)
@@ -367,7 +369,7 @@ class _StatCard extends StatelessWidget {
                 child: Text(
                   label,
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: AppColors.textMutedDark,
+                        color: AppColors.textMuted,
                       ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -402,8 +404,8 @@ class _StatCard extends StatelessWidget {
                   subtitle!,
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
                         color: isActive
-                            ? AppColors.textSecondaryDark
-                            : AppColors.textMutedDark,
+                            ? AppColors.textSecondary
+                            : AppColors.textMuted,
                       ),
                 ),
               ],
