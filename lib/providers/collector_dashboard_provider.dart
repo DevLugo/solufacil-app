@@ -66,16 +66,16 @@ class WeekState {
     final endMonth = months[weekEnd.month - 1];
 
     if (startMonth == endMonth) {
-      return 'Lun ${weekStart.day} - Sáb ${weekEnd.day} $startMonth';
+      return 'Lun ${weekStart.day} - Dom ${weekEnd.day} $startMonth';
     } else {
-      return 'Lun ${weekStart.day} $startMonth - Sáb ${weekEnd.day} $endMonth';
+      return 'Lun ${weekStart.day} $startMonth - Dom ${weekEnd.day} $endMonth';
     }
   }
 
   factory WeekState.current() {
     final now = DateTime.now();
     final weekStart = now.subtract(Duration(days: now.weekday - 1));
-    final weekEnd = weekStart.add(const Duration(days: 5)); // Saturday
+    final weekEnd = weekStart.add(const Duration(days: 6)); // Sunday
     return WeekState(
       weekStart: DateTime(weekStart.year, weekStart.month, weekStart.day),
       weekEnd: DateTime(weekEnd.year, weekEnd.month, weekEnd.day, 23, 59, 59),
@@ -296,6 +296,9 @@ final collectorDashboardStatsProvider =
   if (db == null) {
     return CollectorDashboardStats.empty();
   }
+
+  // Minimum loading time for skeleton visibility
+  final minLoadingTime = Future.delayed(const Duration(milliseconds: 400));
 
   final userName = authState.user?.fullName?.split(' ').first ?? 'Usuario';
   final weekStartStr = weekState.weekStart.toIso8601String().split('T')[0];
@@ -629,7 +632,7 @@ final collectorDashboardStatsProvider =
     final comparisonAmountVsLastWeek = collectedAmountThisWeek - collectedAmountLastWeek;
     final isAheadOfLastWeek = comparisonVsLastWeek >= 0;
 
-    return CollectorDashboardStats(
+    final stats = CollectorDashboardStats(
       routeName: selectedRoute?.name,
       expectedPaymentsThisWeek: expectedPaymentsThisWeek,
       collectedPaymentsThisWeek: collectedPaymentsThisWeek,
@@ -660,6 +663,10 @@ final collectorDashboardStatsProvider =
       userName: userName,
       isOnline: !isSyncing,
     );
+
+    // Ensure minimum loading time for skeleton visibility
+    await minLoadingTime;
+    return stats;
   } catch (e) {
     return CollectorDashboardStats(
       routeName: selectedRoute?.name,

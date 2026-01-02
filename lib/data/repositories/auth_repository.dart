@@ -44,12 +44,16 @@ class UserInfo {
     final personalData =
         employee?['personalData'] as Map<String, dynamic>?;
 
+    // Priority: employee.personalData.fullName > user.name
+    final fullName = personalData?['fullName'] as String? ??
+                     json['name'] as String?;
+
     return UserInfo(
       id: json['id'] as String,
       email: json['email'] as String,
       role: json['role'] as String,
       employeeId: employee?['id'] as String?,
-      fullName: personalData?['fullName'] as String?,
+      fullName: fullName,
     );
   }
 }
@@ -85,6 +89,7 @@ class AuthRepository {
                 refreshToken
                 user {
                   id
+                  name
                   email
                   role
                   employee {
@@ -192,6 +197,7 @@ class AuthRepository {
                 refreshToken
                 user {
                   id
+                  name
                   email
                   role
                   employee {
