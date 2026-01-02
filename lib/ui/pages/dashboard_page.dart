@@ -7,7 +7,8 @@ import 'package:intl/intl.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/colors.dart';
-import '../../providers/dashboard_provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/collector_dashboard_provider.dart';
 import '../../providers/powersync_provider.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
@@ -23,7 +24,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    final statsAsync = ref.watch(dashboardStatsProvider);
+    final statsAsync = ref.watch(collectorDashboardStatsProvider);
+    final weekState = ref.watch(weekStateProvider);
+    final routesAsync = ref.watch(routesProvider);
+    final selectedRoute = ref.watch(selectedRouteProvider);
     final isSyncing = ref.watch(isSyncingProvider);
 
     return Scaffold(
@@ -32,20 +36,18 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         child: RefreshIndicator(
           onRefresh: () async {
             await triggerSync(ref);
-            ref.invalidate(dashboardStatsProvider);
+            ref.invalidate(collectorDashboardStatsProvider);
           },
           color: AppColors.primary,
           child: statsAsync.when(
-            data: (stats) => _buildContent(stats),
-            loading: () => _buildContent(DashboardStats.empty(), isLoading: true),
-            error: (_, __) => _buildContent(DashboardStats.empty()),
+            data: (stats) => _buildContent(stats, weekState, routesAsync, selectedRoute, isSyncing),
+            loading: () => _buildContent(CollectorDashboardStats.empty(), weekState, routesAsync, selectedRoute, true),
+            error: (_, __) => _buildContent(CollectorDashboardStats.empty(), weekState, routesAsync, selectedRoute, false),
           ),
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          context.push(AppRoutes.createCredit);
-        },
+        onPressed: () => context.push(AppRoutes.createCredit),
         elevation: 8,
         child: const Icon(LucideIcons.plus, size: 28),
       ),
@@ -53,79 +55,110 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       bottomNavigationBar: _BottomNavBar(
         currentIndex: _currentIndex,
         onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
+          setState(() => _currentIndex = index);
           _handleNavigation(index);
         },
       ),
     );
   }
 
-  Widget _buildContent(DashboardStats stats, {bool isLoading = false}) {
-    final collectionProgress = stats.collectionProgress.clamp(0.0, 1.0);
-    final pendingProgress = 1.0 - collectionProgress;
-
+  Widget _buildContent(
+    CollectorDashboardStats stats,
+    WeekState weekState,
+    AsyncValue<List<RouteModel>> routesAsync,
+    RouteModel? selectedRoute,
+    bool isLoading,
+  ) {
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Welcome Card
-          _WelcomeCard(
+          // Header with route selector
+          _HeaderSection(
             userName: stats.userName,
-            weekLabel: stats.currentWeek,
-            pendingCollections: stats.pendingCollectionsToday,
-            newClients: stats.newClientsThisWeek,
             isOnline: stats.isOnline,
+            routes: routesAsync.valueOrNull ?? [],
+            selectedRoute: selectedRoute,
+            onRouteSelected: (route) {
+              ref.read(selectedRouteProvider.notifier).state = route;
+            },
+            onLogout: () {
+              ref.read(authProvider.notifier).logout();
+            },
           ),
           const SizedBox(height: 16),
 
-          // Main KPI Card
-          _MainKPICard(
-            totalPortfolio: _currencyFormat.format(stats.totalPortfolio),
-            growthPercent: stats.portfolioGrowth,
+          // Week Navigator
+          _WeekNavigator(
+            weekState: weekState,
+            onPrevious: () => ref.read(weekStateProvider.notifier).goToPreviousWeek(),
+            onNext: weekState.isCurrentWeek
+                ? null
+                : () => ref.read(weekStateProvider.notifier).goToNextWeek(),
+            onToday: weekState.isCurrentWeek
+                ? null
+                : () => ref.read(weekStateProvider.notifier).goToCurrentWeek(),
+          ),
+          const SizedBox(height: 16),
+
+          // Main Collection Progress
+          _CollectionProgressCard(
+            collected: stats.collectedPaymentsThisWeek,
+            expected: stats.expectedPaymentsThisWeek,
+            missing: stats.missingPaymentsThisWeek,
+            progress: stats.goalProgress,
             isLoading: isLoading,
           ),
           const SizedBox(height: 16),
 
-          // KPI Grid
+          // Amount KPIs
           Row(
             children: [
-              Expanded(child: _KPICard(
-                title: 'Cobrado',
-                value: _currencyFormat.format(stats.collectedAmount),
-                progress: collectionProgress,
-                progressLabel: '${(collectionProgress * 100).toStringAsFixed(0)}% de la meta',
-                icon: LucideIcons.checkCircle2,
-                iconBgColor: const Color(0xFFDCFCE7),
-                iconColor: const Color(0xFF16A34A),
-                isLoading: isLoading,
-              )),
-              const SizedBox(width: 16),
-              Expanded(child: _KPICard(
-                title: 'Pendiente',
-                value: _currencyFormat.format(stats.pendingAmount),
-                progress: pendingProgress,
-                progressLabel: '${(pendingProgress * 100).toStringAsFixed(0)}% restante',
-                icon: LucideIcons.alertCircle,
-                iconBgColor: const Color(0xFFFED7AA),
-                iconColor: const Color(0xFFEA580C),
-                progressColor: AppColors.warning,
-                isLoading: isLoading,
-              )),
+              Expanded(
+                child: _AmountCard(
+                  title: 'Cobrado',
+                  amount: _currencyFormat.format(stats.collectedAmountThisWeek),
+                  icon: LucideIcons.checkCircle2,
+                  color: AppColors.success,
+                  isLoading: isLoading,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _AmountCard(
+                  title: 'Esperado',
+                  amount: _currencyFormat.format(stats.expectedAmountThisWeek),
+                  icon: LucideIcons.target,
+                  color: AppColors.info,
+                  isLoading: isLoading,
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
-          // Weekly Summary
-          _WeeklySummaryCard(
-            loansCount: stats.weeklyLoansCount,
-            loansAmount: _currencyFormat.format(stats.weeklyLoansAmount),
-            paymentsCount: stats.weeklyPaymentsCount,
-            paymentsAmount: _currencyFormat.format(stats.weeklyPaymentsAmount),
-            weekLabel: stats.currentWeek,
+          // Comparison with last week
+          _ComparisonCard(
+            collectedThisWeek: stats.collectedPaymentsThisWeek,
+            collectedLastWeek: stats.collectedPaymentsLastWeek,
+            amountThisWeek: stats.collectedAmountThisWeek,
+            amountLastWeek: stats.collectedAmountLastWeek,
+            difference: stats.comparisonVsLastWeek,
+            amountDifference: stats.comparisonAmountVsLastWeek,
+            isAhead: stats.isAheadOfLastWeek,
+            currencyFormat: _currencyFormat,
+            isLoading: isLoading,
+          ),
+          const SizedBox(height: 16),
+
+          // Portfolio Summary
+          _PortfolioCard(
+            activeLoans: stats.activeLoansCount,
+            pendingDebt: _currencyFormat.format(stats.totalPendingDebt),
+            newLoansThisWeek: stats.newLoansThisWeek,
+            newLoansAmount: _currencyFormat.format(stats.newLoansAmountThisWeek),
             isLoading: isLoading,
           ),
           const SizedBox(height: 24),
@@ -150,13 +183,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   void _handleNavigation(int index) {
     switch (index) {
       case 0:
-        // Already on dashboard
         break;
       case 1:
         context.push(AppRoutes.selectLocation);
         break;
       case 2:
-        // FAB handles this
         break;
       case 3:
         context.push(AppRoutes.clients);
@@ -168,133 +199,245 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   }
 }
 
-/// Welcome card with gradient background
-class _WelcomeCard extends StatelessWidget {
+/// Compact header with greeting, route selector pill, and sync status
+class _HeaderSection extends StatelessWidget {
   final String userName;
-  final String weekLabel;
-  final int pendingCollections;
-  final int newClients;
   final bool isOnline;
+  final List<RouteModel> routes;
+  final RouteModel? selectedRoute;
+  final Function(RouteModel?) onRouteSelected;
+  final VoidCallback onLogout;
 
-  const _WelcomeCard({
+  const _HeaderSection({
     required this.userName,
-    required this.weekLabel,
-    required this.pendingCollections,
-    required this.newClients,
     required this.isOnline,
+    required this.routes,
+    required this.selectedRoute,
+    required this.onRouteSelected,
+    required this.onLogout,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: AppColors.welcomeCardGradient,
-        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-        boxShadow: AppTheme.shadowLg,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Hola, $userName',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+    return Row(
+      children: [
+        // Greeting with logout menu
+        Expanded(
+          child: GestureDetector(
+            onTap: () => _showLogoutDialog(context),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'Hola, $userName',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.secondary,
+                      ),
                     ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      LucideIcons.chevronDown,
+                      size: 16,
+                      color: AppColors.textSecondary,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _getWeekLabel(),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
                   ),
-                  const SizedBox(height: 4),
+                ),
+              ],
+            ),
+          ),
+        ),
+        // Route selector pill
+        _RouteChip(
+          routes: routes,
+          selectedRoute: selectedRoute,
+          onRouteSelected: onRouteSelected,
+        ),
+        const SizedBox(width: 8),
+        // Sync indicator
+        _SyncIndicator(isOnline: isOnline),
+      ],
+    );
+  }
+
+  void _showLogoutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cerrar Sesión'),
+        content: const Text(
+          '¿Deseas cerrar sesión? Esto limpiará los datos locales y forzará una nueva sincronización al volver a iniciar sesión.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              onLogout();
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.error,
+            ),
+            child: const Text('Cerrar Sesión'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getWeekLabel() {
+    final now = DateTime.now();
+    final months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    return '${now.day} ${months[now.month - 1]} ${now.year}';
+  }
+}
+
+/// Compact route selector chip
+class _RouteChip extends StatelessWidget {
+  final List<RouteModel> routes;
+  final RouteModel? selectedRoute;
+  final Function(RouteModel?) onRouteSelected;
+
+  const _RouteChip({
+    required this.routes,
+    required this.selectedRoute,
+    required this.onRouteSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<RouteModel?>(
+      onSelected: onRouteSelected,
+      offset: const Offset(0, 40),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      itemBuilder: (context) => [
+        PopupMenuItem<RouteModel?>(
+          value: null,
+          child: Row(
+            children: [
+              Icon(
+                LucideIcons.globe,
+                size: 16,
+                color: selectedRoute == null ? AppColors.primary : AppColors.textSecondary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Todas',
+                style: TextStyle(
+                  fontWeight: selectedRoute == null ? FontWeight.bold : FontWeight.normal,
+                  color: selectedRoute == null ? AppColors.primary : AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        ...routes.map((route) => PopupMenuItem<RouteModel?>(
+              value: route,
+              child: Row(
+                children: [
+                  Icon(
+                    LucideIcons.mapPin,
+                    size: 16,
+                    color: selectedRoute?.id == route.id ? AppColors.primary : AppColors.textSecondary,
+                  ),
+                  const SizedBox(width: 8),
                   Text(
-                    weekLabel,
+                    route.name,
                     style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white.withOpacity(0.7),
+                      fontWeight: selectedRoute?.id == route.id ? FontWeight.bold : FontWeight.normal,
+                      color: selectedRoute?.id == route.id ? AppColors.primary : AppColors.textPrimary,
                     ),
                   ),
                 ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                  border: Border.all(
-                    color: (isOnline ? const Color(0xFF22C55E) : AppColors.warning).withOpacity(0.3),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: isOnline ? const Color(0xFF22C55E) : AppColors.warning,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      isOnline ? 'En línea' : 'Sincronizando...',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white.withOpacity(0.8),
-                      ),
-                    ),
-                  ],
-                ),
+            )),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              LucideIcons.mapPin,
+              size: 14,
+              color: AppColors.primary,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              selectedRoute?.name ?? 'Todas',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: AppColors.secondary,
               ),
-            ],
+            ),
+            const SizedBox(width: 2),
+            Icon(
+              LucideIcons.chevronDown,
+              size: 14,
+              color: AppColors.textSecondary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SyncIndicator extends StatelessWidget {
+  final bool isOnline;
+
+  const _SyncIndicator({required this.isOnline});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: (isOnline ? AppColors.success : AppColors.warning).withOpacity(0.3),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: isOnline ? AppColors.success : AppColors.warning,
+              shape: BoxShape.circle,
+            ),
           ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '$pendingCollections cobros pendientes hoy',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white.withOpacity(0.8),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF60A5FA),
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '$newClients clientes nuevos esta semana',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white.withOpacity(0.8),
-                ),
-              ),
-            ],
+          const SizedBox(width: 6),
+          Text(
+            isOnline ? 'Sync' : 'Sync...',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withOpacity(0.9),
+            ),
           ),
         ],
       ),
@@ -302,24 +445,146 @@ class _WelcomeCard extends StatelessWidget {
   }
 }
 
-/// Main KPI card - Cartera Total
-class _MainKPICard extends StatelessWidget {
-  final String totalPortfolio;
-  final double growthPercent;
+/// Week navigator with arrows
+class _WeekNavigator extends StatelessWidget {
+  final WeekState weekState;
+  final VoidCallback onPrevious;
+  final VoidCallback? onNext;
+  final VoidCallback? onToday;
+
+  const _WeekNavigator({
+    required this.weekState,
+    required this.onPrevious,
+    this.onNext,
+    this.onToday,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        boxShadow: AppTheme.shadowCard,
+      ),
+      child: Row(
+        children: [
+          // Previous week button
+          _NavButton(
+            icon: LucideIcons.chevronLeft,
+            onTap: onPrevious,
+          ),
+          Expanded(
+            child: Column(
+              children: [
+                Text(
+                  weekState.label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.secondary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  weekState.rangeLabel,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Next week / Today button
+          if (!weekState.isCurrentWeek) ...[
+            _NavButton(
+              icon: LucideIcons.chevronRight,
+              onTap: onNext,
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: onToday,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Hoy',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ),
+          ] else
+            _NavButton(
+              icon: LucideIcons.chevronRight,
+              onTap: null,
+              disabled: true,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NavButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  final bool disabled;
+
+  const _NavButton({
+    required this.icon,
+    this.onTap,
+    this.disabled = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: disabled ? null : onTap,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: disabled
+              ? AppColors.border.withOpacity(0.3)
+              : AppColors.surface,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          icon,
+          size: 20,
+          color: disabled ? AppColors.textMuted : AppColors.textSecondary,
+        ),
+      ),
+    );
+  }
+}
+
+/// Main collection progress card
+class _CollectionProgressCard extends StatelessWidget {
+  final int collected;
+  final int expected;
+  final int missing;
+  final double progress;
   final bool isLoading;
 
-  const _MainKPICard({
-    required this.totalPortfolio,
-    required this.growthPercent,
+  const _CollectionProgressCard({
+    required this.collected,
+    required this.expected,
+    required this.missing,
+    required this.progress,
     this.isLoading = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isPositiveGrowth = growthPercent >= 0;
-    final growthColor = isPositiveGrowth ? AppColors.success : AppColors.error;
-    final growthIcon = isPositiveGrowth ? LucideIcons.trendingUp : LucideIcons.trendingDown;
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -327,71 +592,81 @@ class _MainKPICard extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         boxShadow: AppTheme.shadowCard,
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
             children: [
-              Text(
-                'Cartera Total',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textSecondary,
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
                 ),
+                child: Icon(LucideIcons.users, size: 24, color: AppColors.primary),
               ),
-              const SizedBox(height: 4),
-              isLoading
-                  ? Container(
-                      width: 120,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: AppColors.border.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    )
-                  : Text(
-                      totalPortfolio,
-                      style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Cobros de la Semana',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
                         color: AppColors.secondary,
                       ),
                     ),
-            ],
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: growthColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                ),
-                child: Row(
-                  children: [
-                    Icon(growthIcon, size: 14, color: growthColor),
-                    const SizedBox(width: 4),
+                    const SizedBox(height: 2),
                     Text(
-                      '${isPositiveGrowth ? '+' : ''}${growthPercent.toStringAsFixed(0)}%',
+                      '${progress.toStringAsFixed(0)}% completado',
                       style: TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: growthColor,
+                        color: AppColors.textSecondary,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                'vs semana anterior',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textMuted,
-                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Progress bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: progress / 100,
+              backgroundColor: AppColors.border.withOpacity(0.3),
+              valueColor: AlwaysStoppedAnimation(
+                progress >= 100
+                    ? AppColors.success
+                    : progress >= 50
+                        ? AppColors.primary
+                        : AppColors.warning,
+              ),
+              minHeight: 10,
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Stats row
+          Row(
+            children: [
+              _StatPill(
+                value: '$collected',
+                label: 'Cobrados',
+                color: AppColors.success,
+              ),
+              const SizedBox(width: 12),
+              _StatPill(
+                value: '$missing',
+                label: 'Faltan',
+                color: missing > 0 ? AppColors.warning : AppColors.success,
+              ),
+              const SizedBox(width: 12),
+              _StatPill(
+                value: '$expected',
+                label: 'Esperados',
+                color: AppColors.info,
               ),
             ],
           ),
@@ -401,34 +676,71 @@ class _MainKPICard extends StatelessWidget {
   }
 }
 
-/// KPI Card with progress
-class _KPICard extends StatelessWidget {
-  final String title;
+class _StatPill extends StatelessWidget {
   final String value;
-  final double progress;
-  final String progressLabel;
+  final String label;
+  final Color color;
+
+  const _StatPill({
+    required this.value,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Amount card
+class _AmountCard extends StatelessWidget {
+  final String title;
+  final String amount;
   final IconData icon;
-  final Color iconBgColor;
-  final Color iconColor;
-  final Color? progressColor;
+  final Color color;
   final bool isLoading;
 
-  const _KPICard({
+  const _AmountCard({
     required this.title,
-    required this.value,
-    required this.progress,
-    required this.progressLabel,
+    required this.amount,
     required this.icon,
-    required this.iconBgColor,
-    required this.iconColor,
-    this.progressColor,
+    required this.color,
     this.isLoading = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.background,
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
@@ -442,50 +754,30 @@ class _KPICard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: iconBgColor,
-                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(icon, size: 16, color: iconColor),
+                child: Icon(icon, size: 16, color: color),
               ),
               const SizedBox(width: 8),
               Text(
-                title.toUpperCase(),
+                title,
                 style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
                   color: AppColors.textSecondary,
-                  letterSpacing: 0.5,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Text(
-            value,
-            style: const TextStyle(
-              fontSize: 22,
+            amount,
+            style: TextStyle(
+              fontSize: 20,
               fontWeight: FontWeight.bold,
               color: AppColors.secondary,
             ),
-          ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-            child: LinearProgressIndicator(
-              value: progress,
-              backgroundColor: AppColors.border.withOpacity(0.5),
-              valueColor: AlwaysStoppedAnimation(progressColor ?? AppColors.success),
-              minHeight: 6,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            progressLabel,
-            style: TextStyle(
-              fontSize: 10,
-              color: AppColors.textMuted,
-            ),
-            textAlign: TextAlign.right,
           ),
         ],
       ),
@@ -493,164 +785,300 @@ class _KPICard extends StatelessWidget {
   }
 }
 
-/// Weekly summary card
-class _WeeklySummaryCard extends StatelessWidget {
-  final int loansCount;
-  final String loansAmount;
-  final int paymentsCount;
-  final String paymentsAmount;
-  final String weekLabel;
+/// Comparison card with last week
+class _ComparisonCard extends StatelessWidget {
+  final int collectedThisWeek;
+  final int collectedLastWeek;
+  final double amountThisWeek;
+  final double amountLastWeek;
+  final int difference;
+  final double amountDifference;
+  final bool isAhead;
+  final NumberFormat currencyFormat;
   final bool isLoading;
 
-  const _WeeklySummaryCard({
-    required this.loansCount,
-    required this.loansAmount,
-    required this.paymentsCount,
-    required this.paymentsAmount,
-    required this.weekLabel,
+  const _ComparisonCard({
+    required this.collectedThisWeek,
+    required this.collectedLastWeek,
+    required this.amountThisWeek,
+    required this.amountLastWeek,
+    required this.difference,
+    required this.amountDifference,
+    required this.isAhead,
+    required this.currencyFormat,
     this.isLoading = false,
   });
 
-  String _getWeekRange() {
-    final now = DateTime.now();
-    final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-    final endOfWeek = startOfWeek.add(const Duration(days: 5));
-
-    final months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    final startMonth = months[startOfWeek.month - 1];
-    final endMonth = months[endOfWeek.month - 1];
-
-    if (startMonth == endMonth) {
-      return 'Lun ${startOfWeek.day} - Sáb ${endOfWeek.day} $startMonth';
-    } else {
-      return 'Lun ${startOfWeek.day} $startMonth - Sáb ${endOfWeek.day} $endMonth';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final color = isAhead ? AppColors.success : AppColors.error;
+    final icon = isAhead ? LucideIcons.trendingUp : LucideIcons.trendingDown;
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.background,
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         boxShadow: AppTheme.shadowCard,
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Resumen Semanal',
+              Icon(LucideIcons.barChart3, size: 16, color: AppColors.textSecondary),
+              const SizedBox(width: 6),
+              Text(
+                'vs Semana Pasada',
                 style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
                   color: AppColors.secondary,
                 ),
               ),
+              const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
                 ),
-                child: Text(
-                  _getWeekRange(),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 14, color: color),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${difference >= 0 ? '+' : ''}$difference pagos',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Esta semana',
+                      style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$collectedThisWeek cobros',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.secondary,
+                      ),
+                    ),
+                    Text(
+                      currencyFormat.format(amountThisWeek),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.success,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 40,
+                color: AppColors.border,
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Semana pasada',
+                        style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '$collectedLastWeek cobros',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      Text(
+                        currencyFormat.format(amountLastWeek),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ],
           ),
-          const Divider(height: 24),
+        ],
+      ),
+    );
+  }
+}
+
+/// Portfolio summary card
+class _PortfolioCard extends StatelessWidget {
+  final int activeLoans;
+  final String pendingDebt;
+  final int newLoansThisWeek;
+  final String newLoansAmount;
+  final bool isLoading;
+
+  const _PortfolioCard({
+    required this.activeLoans,
+    required this.pendingDebt,
+    required this.newLoansThisWeek,
+    required this.newLoansAmount,
+    this.isLoading = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        boxShadow: AppTheme.shadowCard,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Row(
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Créditos Otorgados',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$loansCount',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.secondary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      loansAmount,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Pagos Recibidos',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$paymentsCount',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.secondary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      paymentsAmount,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.success,
-                      ),
-                    ),
-                  ],
+              Icon(LucideIcons.briefcase, size: 16, color: AppColors.textSecondary),
+              const SizedBox(width: 6),
+              Text(
+                'Cartera Activa',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.secondary,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          OutlinedButton(
-            onPressed: () {},
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 44),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Text('Ver Reporte Completo'),
-                SizedBox(width: 4),
-                Icon(LucideIcons.chevronRight, size: 18),
-              ],
-            ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _PortfolioStat(
+                  value: '$activeLoans',
+                  label: 'Créditos activos',
+                  icon: LucideIcons.users,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _PortfolioStat(
+                  value: pendingDebt,
+                  label: 'Deuda pendiente',
+                  icon: LucideIcons.dollarSign,
+                  color: AppColors.warning,
+                ),
+              ),
+            ],
           ),
+          if (newLoansThisWeek > 0) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.success.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.plus, size: 14, color: AppColors.success),
+                  const SizedBox(width: 6),
+                  Text(
+                    '$newLoansThisWeek nuevos esta semana',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.success,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    newLoansAmount,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.success,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+class _PortfolioStat extends StatelessWidget {
+  final String value;
+  final String label;
+  final IconData icon;
+  final Color color;
+
+  const _PortfolioStat({
+    required this.value,
+    required this.label,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: AppColors.secondary,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -760,7 +1188,7 @@ class _QuickActionButton extends StatelessWidget {
   }
 }
 
-/// Bottom navigation bar with FAB notch
+/// Bottom navigation bar
 class _BottomNavBar extends StatelessWidget {
   final int currentIndex;
   final Function(int) onTap;
@@ -777,10 +1205,8 @@ class _BottomNavBar extends StatelessWidget {
       notchMargin: 8,
       color: AppColors.background,
       elevation: 8,
-      height: 56,
-      child: SizedBox(
-        height: 56,
-        child: Row(
+      height: 60,
+      child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             _NavItem(
@@ -795,7 +1221,7 @@ class _BottomNavBar extends StatelessWidget {
               isSelected: currentIndex == 1,
               onTap: () => onTap(1),
             ),
-            const SizedBox(width: 48), // Space for FAB
+            const SizedBox(width: 48),
             _NavItem(
               icon: LucideIcons.users,
               label: 'Clientes',
@@ -810,7 +1236,6 @@ class _BottomNavBar extends StatelessWidget {
             ),
           ],
         ),
-      ),
     );
   }
 }
@@ -833,25 +1258,25 @@ class _NavItem extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: SizedBox(
+        width: 56,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               icon,
-              size: 22,
+              size: 20,
               color: isSelected ? AppColors.primary : AppColors.textMuted,
             ),
-            const SizedBox(height: 2),
             Text(
               label,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 9,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                 color: isSelected ? AppColors.primary : AppColors.textMuted,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
