@@ -12,11 +12,15 @@ import '../core/services/loan_calculator.dart';
 
 /// Wizard steps for credit creation
 enum CreditWizardStep {
-  client,     // Step 1: Select/create client
-  loanType,   // Step 2: Select loan type and amount
-  collateral, // Step 3: Optional collateral/aval
-  firstPayment, // Step 4: Optional first payment
-  confirmation, // Step 5: Review and confirm
+  client,        // Step 1: Select/create client
+  loanType,      // Step 2: Select loan type and amount
+  collateral,    // Step 3: Optional collateral/aval
+  firstPayment,  // Step 4: Optional first payment
+  documents,     // Step 5: Document photos (INE, proof of address, promissory note)
+  signature,     // Step 6: Contract/promissory note signature
+  fingerprints,  // Step 7: Fingerprints capture
+  videoRecording,// Step 8: Video recording
+  confirmation,  // Step 9: Review and confirm
 }
 
 /// Input for first payment in wizard
@@ -42,6 +46,170 @@ class FirstPaymentInput {
       commissionAmount: commissionAmount ?? this.commissionAmount,
     );
   }
+}
+
+/// Signature data for contract/promissory note
+class SignatureData {
+  final String? borrowerSignaturePath;
+  final String? collateralSignaturePath;
+  final DateTime? signedAt;
+
+  const SignatureData({
+    this.borrowerSignaturePath,
+    this.collateralSignaturePath,
+    this.signedAt,
+  });
+
+  SignatureData copyWith({
+    String? borrowerSignaturePath,
+    String? collateralSignaturePath,
+    DateTime? signedAt,
+    bool clearBorrowerSignature = false,
+    bool clearCollateralSignature = false,
+  }) {
+    return SignatureData(
+      borrowerSignaturePath: clearBorrowerSignature ? null : (borrowerSignaturePath ?? this.borrowerSignaturePath),
+      collateralSignaturePath: clearCollateralSignature ? null : (collateralSignaturePath ?? this.collateralSignaturePath),
+      signedAt: signedAt ?? this.signedAt,
+    );
+  }
+
+  bool get hasBorrowerSignature => borrowerSignaturePath != null;
+  bool get hasCollateralSignature => collateralSignaturePath != null;
+  bool get isComplete => hasBorrowerSignature;
+}
+
+/// Fingerprint/Biometric verification data
+class FingerprintData {
+  final bool borrowerVerified;
+  final DateTime? borrowerVerifiedAt;
+  final bool collateralVerified;
+  final DateTime? collateralVerifiedAt;
+
+  const FingerprintData({
+    this.borrowerVerified = false,
+    this.borrowerVerifiedAt,
+    this.collateralVerified = false,
+    this.collateralVerifiedAt,
+  });
+
+  FingerprintData copyWith({
+    bool? borrowerVerified,
+    DateTime? borrowerVerifiedAt,
+    bool? collateralVerified,
+    DateTime? collateralVerifiedAt,
+    bool clearBorrower = false,
+    bool clearCollateral = false,
+  }) {
+    return FingerprintData(
+      borrowerVerified: clearBorrower ? false : (borrowerVerified ?? this.borrowerVerified),
+      borrowerVerifiedAt: clearBorrower ? null : (borrowerVerifiedAt ?? this.borrowerVerifiedAt),
+      collateralVerified: clearCollateral ? false : (collateralVerified ?? this.collateralVerified),
+      collateralVerifiedAt: clearCollateral ? null : (collateralVerifiedAt ?? this.collateralVerifiedAt),
+    );
+  }
+
+  bool get hasBorrowerVerification => borrowerVerified;
+  bool get hasCollateralVerification => collateralVerified;
+  bool get isComplete => borrowerVerified;
+}
+
+/// Video recording data
+class VideoRecordingData {
+  final String? videoPath;
+  final Duration? duration;
+  final DateTime? recordedAt;
+  final String? thumbnailPath;
+
+  const VideoRecordingData({
+    this.videoPath,
+    this.duration,
+    this.recordedAt,
+    this.thumbnailPath,
+  });
+
+  VideoRecordingData copyWith({
+    String? videoPath,
+    Duration? duration,
+    DateTime? recordedAt,
+    String? thumbnailPath,
+    bool clearVideo = false,
+  }) {
+    return VideoRecordingData(
+      videoPath: clearVideo ? null : (videoPath ?? this.videoPath),
+      duration: clearVideo ? null : (duration ?? this.duration),
+      recordedAt: recordedAt ?? this.recordedAt,
+      thumbnailPath: clearVideo ? null : (thumbnailPath ?? this.thumbnailPath),
+    );
+  }
+
+  bool get hasVideo => videoPath != null;
+  bool get isComplete => hasVideo;
+}
+
+/// Document photos data (INE, proof of address, signed promissory note)
+class DocumentPhotosData {
+  // Borrower documents
+  final String? borrowerIneFrontPath;
+  final String? borrowerIneBackPath;
+  final String? borrowerProofOfAddressPath;
+  final String? signedPromissoryNotePath;
+
+  // Collateral documents (if applicable)
+  final String? collateralIneFrontPath;
+  final String? collateralIneBackPath;
+  final String? collateralProofOfAddressPath;
+
+  final DateTime? capturedAt;
+
+  const DocumentPhotosData({
+    this.borrowerIneFrontPath,
+    this.borrowerIneBackPath,
+    this.borrowerProofOfAddressPath,
+    this.signedPromissoryNotePath,
+    this.collateralIneFrontPath,
+    this.collateralIneBackPath,
+    this.collateralProofOfAddressPath,
+    this.capturedAt,
+  });
+
+  DocumentPhotosData copyWith({
+    String? borrowerIneFrontPath,
+    String? borrowerIneBackPath,
+    String? borrowerProofOfAddressPath,
+    String? signedPromissoryNotePath,
+    String? collateralIneFrontPath,
+    String? collateralIneBackPath,
+    String? collateralProofOfAddressPath,
+    DateTime? capturedAt,
+    bool clearBorrowerIneFront = false,
+    bool clearBorrowerIneBack = false,
+    bool clearBorrowerProofOfAddress = false,
+    bool clearSignedPromissoryNote = false,
+    bool clearCollateralIneFront = false,
+    bool clearCollateralIneBack = false,
+    bool clearCollateralProofOfAddress = false,
+  }) {
+    return DocumentPhotosData(
+      borrowerIneFrontPath: clearBorrowerIneFront ? null : (borrowerIneFrontPath ?? this.borrowerIneFrontPath),
+      borrowerIneBackPath: clearBorrowerIneBack ? null : (borrowerIneBackPath ?? this.borrowerIneBackPath),
+      borrowerProofOfAddressPath: clearBorrowerProofOfAddress ? null : (borrowerProofOfAddressPath ?? this.borrowerProofOfAddressPath),
+      signedPromissoryNotePath: clearSignedPromissoryNote ? null : (signedPromissoryNotePath ?? this.signedPromissoryNotePath),
+      collateralIneFrontPath: clearCollateralIneFront ? null : (collateralIneFrontPath ?? this.collateralIneFrontPath),
+      collateralIneBackPath: clearCollateralIneBack ? null : (collateralIneBackPath ?? this.collateralIneBackPath),
+      collateralProofOfAddressPath: clearCollateralProofOfAddress ? null : (collateralProofOfAddressPath ?? this.collateralProofOfAddressPath),
+      capturedAt: capturedAt ?? this.capturedAt,
+    );
+  }
+
+  bool get hasBorrowerIne => borrowerIneFrontPath != null && borrowerIneBackPath != null;
+  bool get hasBorrowerProofOfAddress => borrowerProofOfAddressPath != null;
+  bool get hasSignedPromissoryNote => signedPromissoryNotePath != null;
+  bool get hasCollateralIne => collateralIneFrontPath != null && collateralIneBackPath != null;
+  bool get hasCollateralProofOfAddress => collateralProofOfAddressPath != null;
+
+  /// Minimum required: INE and proof of address for borrower
+  bool get isComplete => hasBorrowerIne && hasBorrowerProofOfAddress;
 }
 
 /// Complete state for the create credit wizard
@@ -74,6 +242,18 @@ class CreateCreditState {
   final bool hasFirstPayment;
   final FirstPaymentInput? firstPayment;
 
+  // Step 5: Document photos
+  final DocumentPhotosData? documentPhotosData;
+
+  // Step 6: Signature
+  final SignatureData? signatureData;
+
+  // Step 7: Fingerprints
+  final FingerprintData? fingerprintData;
+
+  // Step 8: Video recording
+  final VideoRecordingData? videoData;
+
   // Process state
   final bool isLoading;
   final bool isSubmitting;
@@ -98,6 +278,10 @@ class CreateCreditState {
     this.newCollateralInput,
     this.hasFirstPayment = false,
     this.firstPayment,
+    this.documentPhotosData,
+    this.signatureData,
+    this.fingerprintData,
+    this.videoData,
     this.isLoading = false,
     this.isSubmitting = false,
     this.error,
@@ -122,6 +306,10 @@ class CreateCreditState {
     CreateBorrowerInput? newCollateralInput,
     bool? hasFirstPayment,
     FirstPaymentInput? firstPayment,
+    DocumentPhotosData? documentPhotosData,
+    SignatureData? signatureData,
+    FingerprintData? fingerprintData,
+    VideoRecordingData? videoData,
     bool? isLoading,
     bool? isSubmitting,
     String? error,
@@ -136,6 +324,10 @@ class CreateCreditState {
     bool clearSelectedCollateral = false,
     bool clearNewCollateralInput = false,
     bool clearFirstPayment = false,
+    bool clearDocumentPhotosData = false,
+    bool clearSignatureData = false,
+    bool clearFingerprintData = false,
+    bool clearVideoData = false,
     bool clearError = false,
     bool clearCreatedLoanId = false,
   }) {
@@ -156,6 +348,10 @@ class CreateCreditState {
       newCollateralInput: clearNewCollateralInput ? null : (newCollateralInput ?? this.newCollateralInput),
       hasFirstPayment: hasFirstPayment ?? this.hasFirstPayment,
       firstPayment: clearFirstPayment ? null : (firstPayment ?? this.firstPayment),
+      documentPhotosData: clearDocumentPhotosData ? null : (documentPhotosData ?? this.documentPhotosData),
+      signatureData: clearSignatureData ? null : (signatureData ?? this.signatureData),
+      fingerprintData: clearFingerprintData ? null : (fingerprintData ?? this.fingerprintData),
+      videoData: clearVideoData ? null : (videoData ?? this.videoData),
       isLoading: isLoading ?? this.isLoading,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       error: clearError ? null : (error ?? this.error),
@@ -177,6 +373,18 @@ class CreateCreditState {
       case CreditWizardStep.firstPayment:
         // First payment is optional, always can proceed
         return true;
+      case CreditWizardStep.documents:
+        // Require at least borrower INE and proof of address
+        return documentPhotosData?.isComplete ?? false;
+      case CreditWizardStep.signature:
+        // Require borrower signature
+        return signatureData?.isComplete ?? false;
+      case CreditWizardStep.fingerprints:
+        // Require borrower fingerprints
+        return fingerprintData?.isComplete ?? false;
+      case CreditWizardStep.videoRecording:
+        // Require video recording
+        return videoData?.isComplete ?? false;
       case CreditWizardStep.confirmation:
         return !isSubmitting;
     }
@@ -473,7 +681,185 @@ class CreateCreditNotifier extends StateNotifier<CreateCreditState> {
     }
   }
 
-  // ============ STEP 5: SUBMIT ============
+  // ============ STEP 5: DOCUMENT PHOTOS ============
+
+  /// Set borrower INE front photo
+  void setBorrowerIneFront(String path) {
+    final current = state.documentPhotosData ?? const DocumentPhotosData();
+    state = state.copyWith(
+      documentPhotosData: current.copyWith(
+        borrowerIneFrontPath: path,
+        capturedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  /// Set borrower INE back photo
+  void setBorrowerIneBack(String path) {
+    final current = state.documentPhotosData ?? const DocumentPhotosData();
+    state = state.copyWith(
+      documentPhotosData: current.copyWith(
+        borrowerIneBackPath: path,
+        capturedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  /// Set borrower proof of address photo
+  void setBorrowerProofOfAddress(String path) {
+    final current = state.documentPhotosData ?? const DocumentPhotosData();
+    state = state.copyWith(
+      documentPhotosData: current.copyWith(
+        borrowerProofOfAddressPath: path,
+        capturedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  /// Set signed promissory note photo
+  void setSignedPromissoryNote(String path) {
+    final current = state.documentPhotosData ?? const DocumentPhotosData();
+    state = state.copyWith(
+      documentPhotosData: current.copyWith(
+        signedPromissoryNotePath: path,
+        capturedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  /// Set collateral INE front photo
+  void setCollateralIneFront(String path) {
+    final current = state.documentPhotosData ?? const DocumentPhotosData();
+    state = state.copyWith(
+      documentPhotosData: current.copyWith(
+        collateralIneFrontPath: path,
+        capturedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  /// Set collateral INE back photo
+  void setCollateralIneBack(String path) {
+    final current = state.documentPhotosData ?? const DocumentPhotosData();
+    state = state.copyWith(
+      documentPhotosData: current.copyWith(
+        collateralIneBackPath: path,
+        capturedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  /// Set collateral proof of address photo
+  void setCollateralProofOfAddress(String path) {
+    final current = state.documentPhotosData ?? const DocumentPhotosData();
+    state = state.copyWith(
+      documentPhotosData: current.copyWith(
+        collateralProofOfAddressPath: path,
+        capturedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  /// Clear all document photos
+  void clearDocumentPhotos() {
+    state = state.copyWith(clearDocumentPhotosData: true);
+  }
+
+  // ============ STEP 6: SIGNATURE ============
+
+  /// Set borrower signature
+  void setBorrowerSignature(String path) {
+    final current = state.signatureData ?? const SignatureData();
+    state = state.copyWith(
+      signatureData: current.copyWith(
+        borrowerSignaturePath: path,
+        signedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  /// Set collateral signature
+  void setCollateralSignature(String path) {
+    final current = state.signatureData ?? const SignatureData();
+    state = state.copyWith(
+      signatureData: current.copyWith(
+        collateralSignaturePath: path,
+        signedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  /// Clear borrower signature
+  void clearBorrowerSignature() {
+    if (state.signatureData != null) {
+      state = state.copyWith(
+        signatureData: state.signatureData!.copyWith(clearBorrowerSignature: true),
+      );
+    }
+  }
+
+  /// Clear collateral signature
+  void clearCollateralSignature() {
+    if (state.signatureData != null) {
+      state = state.copyWith(
+        signatureData: state.signatureData!.copyWith(clearCollateralSignature: true),
+      );
+    }
+  }
+
+  // ============ STEP 7: BIOMETRIC VERIFICATION ============
+
+  /// Set borrower biometric verification
+  void setBorrowerBiometricVerified(bool verified) {
+    final current = state.fingerprintData ?? const FingerprintData();
+    state = state.copyWith(
+      fingerprintData: current.copyWith(
+        borrowerVerified: verified,
+        borrowerVerifiedAt: verified ? DateTime.now() : null,
+      ),
+    );
+  }
+
+  /// Set collateral biometric verification
+  void setCollateralBiometricVerified(bool verified) {
+    final current = state.fingerprintData ?? const FingerprintData();
+    state = state.copyWith(
+      fingerprintData: current.copyWith(
+        collateralVerified: verified,
+        collateralVerifiedAt: verified ? DateTime.now() : null,
+      ),
+    );
+  }
+
+  /// Clear all biometric verifications
+  void clearBiometricVerifications() {
+    state = state.copyWith(clearFingerprintData: true);
+  }
+
+  // ============ STEP 8: VIDEO RECORDING ============
+
+  /// Set video recording data
+  void setVideoRecording({
+    required String videoPath,
+    Duration? duration,
+    String? thumbnailPath,
+  }) {
+    state = state.copyWith(
+      videoData: VideoRecordingData(
+        videoPath: videoPath,
+        duration: duration,
+        recordedAt: DateTime.now(),
+        thumbnailPath: thumbnailPath,
+      ),
+    );
+  }
+
+  /// Clear video recording
+  void clearVideoRecording() {
+    state = state.copyWith(clearVideoData: true);
+  }
+
+  // ============ STEP 9: SUBMIT ============
 
   /// Submit and create the loan
   Future<bool> submit() async {

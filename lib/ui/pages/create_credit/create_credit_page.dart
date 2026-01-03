@@ -11,6 +11,10 @@ import 'step_client.dart';
 import 'step_loan_type.dart';
 import 'step_collateral.dart';
 import 'step_first_payment.dart';
+import 'step_documents.dart';
+import 'step_signature.dart';
+import 'step_fingerprints.dart';
+import 'step_video.dart';
 import 'step_confirmation.dart';
 
 /// Main wizard page for creating/renewing credits
@@ -98,6 +102,9 @@ class _CreateCreditPageState extends ConsumerState<CreateCreditPage> {
   }
 
   Widget _buildProgressIndicator(CreateCreditState state) {
+    // Define step groups for compact display
+    final stepInfo = _getStepInfo(state.currentStep);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
@@ -108,39 +115,54 @@ class _CreateCreditPageState extends ConsumerState<CreateCreditPage> {
       ),
       child: Column(
         children: [
-          // Step labels
+          // Current step info
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _StepLabel(
-                step: 1,
-                label: 'Cliente',
-                isActive: state.currentStep.index >= 0,
-                isCurrent: state.currentStep == CreditWizardStep.client,
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    '${state.stepNumber}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
               ),
-              _StepLabel(
-                step: 2,
-                label: 'Tipo',
-                isActive: state.currentStep.index >= 1,
-                isCurrent: state.currentStep == CreditWizardStep.loanType,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      stepInfo.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      'Paso ${state.stepNumber} de ${state.totalSteps}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              _StepLabel(
-                step: 3,
-                label: 'Aval',
-                isActive: state.currentStep.index >= 2,
-                isCurrent: state.currentStep == CreditWizardStep.collateral,
-              ),
-              _StepLabel(
-                step: 4,
-                label: 'Pago',
-                isActive: state.currentStep.index >= 3,
-                isCurrent: state.currentStep == CreditWizardStep.firstPayment,
-              ),
-              _StepLabel(
-                step: 5,
-                label: 'Confirmar',
-                isActive: state.currentStep.index >= 4,
-                isCurrent: state.currentStep == CreditWizardStep.confirmation,
+              Icon(
+                stepInfo.icon,
+                color: AppColors.primary,
+                size: 24,
               ),
             ],
           ),
@@ -160,6 +182,29 @@ class _CreateCreditPageState extends ConsumerState<CreateCreditPage> {
     );
   }
 
+  _StepInfo _getStepInfo(CreditWizardStep step) {
+    switch (step) {
+      case CreditWizardStep.client:
+        return _StepInfo('Seleccionar Cliente', LucideIcons.user);
+      case CreditWizardStep.loanType:
+        return _StepInfo('Tipo de Crédito', LucideIcons.banknote);
+      case CreditWizardStep.collateral:
+        return _StepInfo('Aval (Opcional)', LucideIcons.shield);
+      case CreditWizardStep.firstPayment:
+        return _StepInfo('Primer Pago', LucideIcons.wallet);
+      case CreditWizardStep.documents:
+        return _StepInfo('Documentos', LucideIcons.fileText);
+      case CreditWizardStep.signature:
+        return _StepInfo('Firma Digital', LucideIcons.penTool);
+      case CreditWizardStep.fingerprints:
+        return _StepInfo('Huellas Dactilares', LucideIcons.fingerprint);
+      case CreditWizardStep.videoRecording:
+        return _StepInfo('Grabación de Video', LucideIcons.video);
+      case CreditWizardStep.confirmation:
+        return _StepInfo('Confirmación', LucideIcons.checkCircle);
+    }
+  }
+
   Widget _buildStepContent(CreateCreditState state, CreateCreditNotifier notifier) {
     // Show success screen if loan was created
     if (state.isSuccess && state.createdLoanId != null) {
@@ -175,6 +220,14 @@ class _CreateCreditPageState extends ConsumerState<CreateCreditPage> {
         return StepCollateral(state: state, notifier: notifier);
       case CreditWizardStep.firstPayment:
         return StepFirstPayment(state: state, notifier: notifier);
+      case CreditWizardStep.documents:
+        return StepDocuments(state: state, notifier: notifier);
+      case CreditWizardStep.signature:
+        return StepSignature(state: state, notifier: notifier);
+      case CreditWizardStep.fingerprints:
+        return StepFingerprints(state: state, notifier: notifier);
+      case CreditWizardStep.videoRecording:
+        return StepVideo(state: state, notifier: notifier);
       case CreditWizardStep.confirmation:
         return StepConfirmation(state: state, notifier: notifier);
     }
@@ -303,64 +356,12 @@ class _CreateCreditPageState extends ConsumerState<CreateCreditPage> {
   }
 }
 
-/// Step label widget
-class _StepLabel extends StatelessWidget {
-  final int step;
-  final String label;
-  final bool isActive;
-  final bool isCurrent;
+/// Step info helper class
+class _StepInfo {
+  final String title;
+  final IconData icon;
 
-  const _StepLabel({
-    required this.step,
-    required this.label,
-    required this.isActive,
-    required this.isCurrent,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: isCurrent
-                ? AppColors.primary
-                : isActive
-                    ? AppColors.primary.withOpacity(0.2)
-                    : AppColors.border,
-            shape: BoxShape.circle,
-          ),
-          child: Center(
-            child: isActive && !isCurrent
-                ? Icon(
-                    LucideIcons.check,
-                    size: 14,
-                    color: AppColors.primary,
-                  )
-                : Text(
-                    '$step',
-                    style: TextStyle(
-                      color: isCurrent ? Colors.white : AppColors.textMuted,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            color: isCurrent ? AppColors.primary : AppColors.textMuted,
-            fontSize: 11,
-            fontWeight: isCurrent ? FontWeight.w600 : FontWeight.normal,
-          ),
-        ),
-      ],
-    );
-  }
+  const _StepInfo(this.title, this.icon);
 }
 
 /// Bottom action bar for wizard steps
