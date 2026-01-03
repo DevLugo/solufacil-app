@@ -43,20 +43,30 @@ class AppRoutes {
   static const String reports = '/reports';
 }
 
-/// Router provider
+/// Auth state notifier for router refresh
+class AuthChangeNotifier extends ChangeNotifier {
+  AuthChangeNotifier(this._ref) {
+    _ref.listen(authProvider, (_, __) => notifyListeners());
+    _ref.listen(selectedLeadProvider, (_, __) => notifyListeners());
+  }
+  final Ref _ref;
+}
+
+/// Router provider - stable instance that reacts to auth changes via refreshListenable
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authProvider);
-  final selectedLead = ref.watch(selectedLeadProvider);
+  final authNotifier = AuthChangeNotifier(ref);
 
   return GoRouter(
-    initialLocation: authState.isAuthenticated
-        ? AppRoutes.dashboard
-        : AppRoutes.onboarding,
+    initialLocation: AppRoutes.onboarding,
     debugLogDiagnostics: true,
+    refreshListenable: authNotifier,
 
     // Redirect logic
     redirect: (context, state) {
+      final authState = ref.read(authProvider);
+      final selectedLead = ref.read(selectedLeadProvider);
       final isAuthenticated = authState.isAuthenticated;
+      final isLoading = authState.isLoading;
       final hasLocalitySelected = selectedLead != null;
       final currentPath = state.matchedLocation;
 
@@ -71,17 +81,23 @@ final routerProvider = Provider<GoRouter>((ref) {
           currentPath == AppRoutes.registerPayment ||
           currentPath == AppRoutes.creditsToday;
 
-      // If not authenticated, allow only onboarding and login
-      if (!isAuthenticated) {
+      // During loading, don't redirect - stay on current page
+      if (isLoading) {
+        return null;
+      }
+
+      // If authenticated, redirect from onboarding/login to dashboard
+      if (isAuthenticated) {
+        if (isOnboarding || isLogin) {
+          return AppRoutes.dashboard;
+        }
+        // Continue to other checks below
+      } else {
+        // Not authenticated - allow onboarding and login, redirect others to login
         if (isOnboarding || isLogin) {
           return null;
         }
         return AppRoutes.login;
-      }
-
-      // If authenticated and trying to access onboarding/login, redirect to dashboard
-      if (isAuthenticated && (isOnboarding || isLogin)) {
-        return AppRoutes.dashboard;
       }
 
       // If trying to perform operations without a locality selected, redirect to dashboard

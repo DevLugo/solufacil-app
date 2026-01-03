@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
@@ -20,6 +21,32 @@ class ClientProfileCard extends StatelessWidget {
     required this.onClear,
     this.showHeader = true,
   });
+
+  /// Get the most recent loan (active first, then any)
+  dynamic get _mostRecentLoan {
+    if (history == null || history!.loansAsClient.isEmpty) return null;
+    // Try most recent active loan first
+    final activeLoan = history!.loansAsClient
+        .where((l) => l.status.name == 'active')
+        .fold<dynamic>(null, (prev, l) =>
+            prev == null || l.signDate.isAfter(prev.signDate) ? l : prev);
+    if (activeLoan != null) return activeLoan;
+    // Otherwise use most recent loan
+    return history!.mostRecentLoanAsClient;
+  }
+
+  /// Check if we have any location info to display
+  bool get _hasLocationInfo =>
+      _routeName != null || _leadName != null || _leadLocality != null;
+
+  /// Get route name from loan's snapshotRouteName
+  String? get _routeName => _mostRecentLoan?.snapshotRouteName;
+
+  /// Get lead name from the most recent loan
+  String? get _leadName => _mostRecentLoan?.leadName;
+
+  /// Get lead locality from the most recent loan
+  String? get _leadLocality => _mostRecentLoan?.leadLocality;
 
   @override
   Widget build(BuildContext context) {
@@ -133,6 +160,43 @@ class ClientProfileCard extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+            ),
+
+          // Route and Lead info (from most recent loan)
+          if (_hasLocationInfo)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (_routeName != null && _routeName!.isNotEmpty)
+                      _LocationChip(
+                        icon: LucideIcons.navigation,
+                        label: _routeName!,
+                        color: AppColors.primary,
+                      ),
+                    if (_leadLocality != null)
+                      _LocationChip(
+                        icon: LucideIcons.mapPin,
+                        label: _leadLocality!,
+                        color: AppColors.success,
+                      ),
+                    if (_leadName != null)
+                      _LocationChip(
+                        icon: LucideIcons.user,
+                        label: _leadName!,
+                        color: AppColors.info,
+                      ),
+                  ],
+                ),
               ),
             ),
 
@@ -411,6 +475,48 @@ class _StatCard extends StatelessWidget {
               ],
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _LocationChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color? color;
+
+  const _LocationChip({
+    required this.icon,
+    required this.label,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final chipColor = color ?? AppColors.info;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: chipColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: chipColor.withOpacity(0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: chipColor),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: chipColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );

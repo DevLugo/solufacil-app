@@ -5,6 +5,7 @@ import '../data/models/client_history.dart';
 import '../data/models/loan.dart';
 import '../core/config/app_config.dart';
 import 'powersync_provider.dart';
+import 'auth_provider.dart';
 
 /// Client history repository provider
 final clientHistoryRepositoryProvider =
@@ -77,7 +78,12 @@ class ClientSearchNotifier extends StateNotifier<SearchState> {
   Future<void> _performSearch(String query) async {
     try {
       final repository = await _ref.read(clientHistoryRepositoryProvider.future);
-      final results = await repository.searchClients(query);
+
+      // Check if user is admin for role-based filtering
+      final authState = _ref.read(authProvider);
+      final isAdmin = authState.user?.role == 'ADMIN';
+
+      final results = await repository.searchClients(query, isAdmin: isAdmin);
 
       // Only update if query hasn't changed
       if (state.query == query) {
@@ -158,7 +164,21 @@ class SelectedClientNotifier extends StateNotifier<SelectedClientState> {
 
     try {
       final repository = await _ref.read(clientHistoryRepositoryProvider.future);
-      final history = await repository.getClientHistory(client.id);
+
+      // Check if user is admin for role-based filtering
+      final authState = _ref.read(authProvider);
+      final isAdmin = authState.user?.role == 'ADMIN';
+
+      final history = await repository.getClientHistory(client.id, isAdmin: isAdmin);
+
+      if (history == null) {
+        state = SelectedClientState(
+          selectedClient: client,
+          isLoading: false,
+          error: 'No tienes permiso para ver este historial',
+        );
+        return;
+      }
 
       state = SelectedClientState(
         selectedClient: client,

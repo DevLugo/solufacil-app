@@ -41,15 +41,20 @@ class PersonalData extends Equatable {
     List<String> phones = const [],
     List<AddressInfo> addresses = const [],
   }) {
+    final now = DateTime.now();
     return PersonalData(
-      id: row['id'] as String,
+      id: (row['id'] as String?) ?? '',
       fullName: row['fullName'] as String? ?? '',
       clientCode: row['clientCode'] as String?,
       birthDate: row['birthDate'] != null
-          ? DateTime.tryParse(row['birthDate'] as String)
+          ? DateTime.tryParse(row['birthDate'].toString())
           : null,
-      createdAt: DateTime.parse(row['createdAt'] as String),
-      updatedAt: DateTime.parse(row['updatedAt'] as String),
+      createdAt: row['createdAt'] != null
+          ? DateTime.tryParse(row['createdAt'].toString()) ?? now
+          : now,
+      updatedAt: row['updatedAt'] != null
+          ? DateTime.tryParse(row['updatedAt'].toString()) ?? now
+          : now,
       phones: phones,
       addresses: addresses,
     );
@@ -110,7 +115,7 @@ class AddressInfo extends Equatable {
 
   factory AddressInfo.fromRow(Map<String, dynamic> row) {
     return AddressInfo(
-      id: row['id'] as String,
+      id: (row['id'] as String?) ?? '',
       street: row['street'] as String?,
       locationName: row['locationName'] as String?,
       municipalityName: row['municipalityName'] as String?,

@@ -16,8 +16,8 @@ class AppConfig {
   static String get apiBaseUrl {
     switch (environment) {
       case 'production':
-        // TODO: Update with your production API URL
-        return 'https://api.solufacil.com';
+        // DigitalOcean App Platform API
+        return 'https://seal-app-zz2t8.ondigitalocean.app';
       case 'local':
         // For real phone on same WiFi network
         return 'http://192.168.1.67:4000';
@@ -34,8 +34,8 @@ class AppConfig {
   static String get powerSyncUrl {
     switch (environment) {
       case 'production':
-        // TODO: Update with your production PowerSync URL
-        return 'https://powersync.solufacil.com';
+        // PowerSync Cloud URL
+        return 'https://6958967030605f245ffeff59.powersync.journeyapps.com';
       case 'local':
         // For real phone on same WiFi network
         return 'http://192.168.1.67:8080';

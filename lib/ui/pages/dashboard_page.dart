@@ -10,6 +10,7 @@ import '../../core/theme/colors.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/collector_dashboard_provider.dart';
 import '../../providers/powersync_provider.dart';
+import '../widgets/sync_status_indicator.dart';
 
 // =============================================================================
 // DASHBOARD THEME
@@ -148,6 +149,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 },
                 onChangeLead: () => context.push(AppRoutes.jornada),
               ),
+            // Sync status banner - shows prominently when syncing or error
+            _SyncStatusBanner(),
             // Main content
             Expanded(
               child: RefreshIndicator(
@@ -2207,6 +2210,341 @@ class _SkeletonState extends State<_Skeleton> with SingleTickerProviderStateMixi
           decoration: BoxDecoration(
             color: baseColor.withOpacity(_animation.value),
             borderRadius: BorderRadius.circular(widget.borderRadius),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// =============================================================================
+// SYNC STATUS BANNER - Prominent sync status at top of dashboard
+// =============================================================================
+
+class _SyncStatusBanner extends ConsumerWidget {
+  const _SyncStatusBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final syncStatusAsync = ref.watch(syncStatusProvider);
+    final lastSync = ref.watch(lastSyncTimeProvider);
+
+    return syncStatusAsync.when(
+      data: (extStatus) => _buildBanner(extStatus, lastSync),
+      loading: () => _buildLoadingBanner(),
+      error: (error, _) => _buildErrorBanner('Error de conexión: $error'),
+    );
+  }
+
+  Widget _buildBanner(ExtendedSyncStatus extStatus, DateTime? lastSync) {
+    final status = extStatus.status;
+
+    // Check for errors first - highest priority
+    if (extStatus.hasRecentError) {
+      if (extStatus.isAuthError) {
+        return _ErrorBanner(
+          icon: LucideIcons.keyRound,
+          title: 'Error de autenticación',
+          message: 'No se puede sincronizar. Verifica tu conexión.',
+          color: AppColors.error,
+        );
+      }
+      return _ErrorBanner(
+        icon: LucideIcons.alertTriangle,
+        title: 'Error de sincronización',
+        message: 'Reintentando conexión...',
+        color: AppColors.warning,
+      );
+    }
+
+    // Check if actively syncing
+    if (status.downloading) {
+      return _SyncingBanner(
+        icon: LucideIcons.download,
+        message: 'Descargando datos del servidor...',
+      );
+    }
+
+    if (status.uploading) {
+      return _SyncingBanner(
+        icon: LucideIcons.upload,
+        message: 'Enviando cambios al servidor...',
+      );
+    }
+
+    if (status.connecting) {
+      return _SyncingBanner(
+        icon: LucideIcons.wifi,
+        message: 'Conectando al servidor...',
+      );
+    }
+
+    // Connected but waiting for initial sync
+    if (status.connected && status.lastSyncedAt == null) {
+      return _SyncingBanner(
+        icon: LucideIcons.cloud,
+        message: 'Sincronización inicial en progreso...',
+      );
+    }
+
+    // Successfully synced - show brief success message then hide
+    if (status.connected && status.lastSyncedAt != null) {
+      // Only show success banner if synced recently (last 5 seconds)
+      final syncedRecently = lastSync != null &&
+          DateTime.now().difference(lastSync).inSeconds < 5;
+
+      if (syncedRecently) {
+        return _SuccessBanner(lastSync: lastSync!);
+      }
+      // Otherwise, show nothing - dashboard is ready
+      return const SizedBox.shrink();
+    }
+
+    // Offline
+    if (!status.connected) {
+      return _OfflineBanner();
+    }
+
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildLoadingBanner() {
+    return _SyncingBanner(
+      icon: LucideIcons.loader,
+      message: 'Iniciando sincronización...',
+    );
+  }
+
+  Widget _buildErrorBanner(String message) {
+    return _ErrorBanner(
+      icon: LucideIcons.alertCircle,
+      title: 'Error',
+      message: message,
+      color: AppColors.error,
+    );
+  }
+}
+
+class _SyncingBanner extends StatelessWidget {
+  final IconData icon;
+  final String message;
+
+  const _SyncingBanner({
+    required this.icon,
+    required this.message,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.info.withOpacity(0.1),
+        border: Border(
+          bottom: BorderSide(color: AppColors.info.withOpacity(0.3)),
+        ),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(AppColors.info),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Icon(icon, size: 16, color: AppColors.info),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: AppColors.info,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ErrorBanner extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String message;
+  final Color color;
+
+  const _ErrorBanner({
+    required this.icon,
+    required this.title,
+    required this.message,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        border: Border(
+          bottom: BorderSide(color: color.withOpacity(0.3)),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(icon, size: 16, color: color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+                Text(
+                  message,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: color.withOpacity(0.8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Pulsing dot to indicate trying to reconnect
+          _PulsingDot(color: color),
+        ],
+      ),
+    );
+  }
+}
+
+class _SuccessBanner extends StatelessWidget {
+  final DateTime lastSync;
+
+  const _SuccessBanner({required this.lastSync});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.success.withOpacity(0.1),
+        border: Border(
+          bottom: BorderSide(color: AppColors.success.withOpacity(0.3)),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(LucideIcons.checkCircle, size: 16, color: AppColors.success),
+          const SizedBox(width: 8),
+          Text(
+            'Sincronizado',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: AppColors.success,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OfflineBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.textMuted.withOpacity(0.1),
+        border: Border(
+          bottom: BorderSide(color: AppColors.textMuted.withOpacity(0.3)),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(LucideIcons.cloudOff, size: 16, color: AppColors.textMuted),
+          const SizedBox(width: 8),
+          Text(
+            'Sin conexión - Modo offline',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textMuted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PulsingDot extends StatefulWidget {
+  final Color color;
+
+  const _PulsingDot({required this.color});
+
+  @override
+  State<_PulsingDot> createState() => _PulsingDotState();
+}
+
+class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+    _animation = Tween<double>(begin: 0.3, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: widget.color.withOpacity(_animation.value),
+            shape: BoxShape.circle,
           ),
         );
       },

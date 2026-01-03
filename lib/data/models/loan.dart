@@ -67,6 +67,7 @@ class Loan extends Equatable {
   // Related data (populated from joins)
   final String? borrowerName;
   final String? leadName;
+  final String? leadLocality;
   final List<String> collateralNames;
   final List<LoanPayment> payments;
 
@@ -96,6 +97,7 @@ class Loan extends Equatable {
     this.rate,
     this.borrowerName,
     this.leadName,
+    this.leadLocality,
     this.collateralNames = const [],
     this.payments = const [],
   });
@@ -133,26 +135,35 @@ class Loan extends Equatable {
   factory Loan.fromRow(Map<String, dynamic> row, {
     String? borrowerName,
     String? leadName,
+    String? leadLocality,
     List<String> collateralNames = const [],
     List<LoanPayment> payments = const [],
     int? weekDuration,
     double? rate,
   }) {
+    // Safely parse dates with null checks
+    DateTime parseDate(dynamic value, DateTime fallback) {
+      if (value == null) return fallback;
+      final parsed = DateTime.tryParse(value.toString());
+      return parsed ?? fallback;
+    }
+
+    DateTime? parseDateNullable(dynamic value) {
+      if (value == null) return null;
+      return DateTime.tryParse(value.toString());
+    }
+
+    final now = DateTime.now();
+
     return Loan(
-      id: row['id'] as String,
+      id: (row['id'] as String?) ?? '',
       oldId: row['oldId'] as String?,
       requestedAmount: (row['requestedAmount'] as num?)?.toDouble() ?? 0,
       amountGived: (row['amountGived'] as num?)?.toDouble() ?? 0,
-      signDate: DateTime.parse(row['signDate'] as String),
-      finishedDate: row['finishedDate'] != null
-          ? DateTime.tryParse(row['finishedDate'] as String)
-          : null,
-      renewedDate: row['renewedDate'] != null
-          ? DateTime.tryParse(row['renewedDate'] as String)
-          : null,
-      badDebtDate: row['badDebtDate'] != null
-          ? DateTime.tryParse(row['badDebtDate'] as String)
-          : null,
+      signDate: parseDate(row['signDate'], now),
+      finishedDate: parseDateNullable(row['finishedDate']),
+      renewedDate: parseDateNullable(row['renewedDate']),
+      badDebtDate: parseDateNullable(row['badDebtDate']),
       isDeceased: (row['isDeceased'] as int?) == 1,
       profitAmount: (row['profitAmount'] as num?)?.toDouble() ?? 0,
       totalDebtAcquired: (row['totalDebtAcquired'] as num?)?.toDouble() ?? 0,
@@ -162,16 +173,17 @@ class Loan extends Equatable {
       pendingAmountStored:
           (row['pendingAmountStored'] as num?)?.toDouble() ?? 0,
       status: LoanStatus.fromString(row['status'] as String?),
-      borrowerId: row['borrower'] as String,
+      borrowerId: (row['borrower'] as String?) ?? '',
       leadId: row['lead'] as String?,
       snapshotRouteName: row['snapshotRouteName'] as String?,
       previousLoanId: row['previousLoan'] as String?,
-      createdAt: DateTime.parse(row['createdAt'] as String),
-      updatedAt: DateTime.parse(row['updatedAt'] as String),
+      createdAt: parseDate(row['createdAt'], now),
+      updatedAt: parseDate(row['updatedAt'], now),
       weekDuration: weekDuration,
       rate: rate,
       borrowerName: borrowerName,
       leadName: leadName,
+      leadLocality: leadLocality,
       collateralNames: collateralNames,
       payments: payments,
     );
@@ -204,6 +216,7 @@ class Loan extends Equatable {
         rate,
         borrowerName,
         leadName,
+        leadLocality,
         collateralNames,
         payments,
       ];
@@ -255,14 +268,19 @@ class LoanPayment extends Equatable {
   });
 
   factory LoanPayment.fromRow(Map<String, dynamic> row) {
+    final now = DateTime.now();
     return LoanPayment(
-      id: row['id'] as String,
+      id: (row['id'] as String?) ?? '',
       amount: (row['amount'] as num?)?.toDouble() ?? 0,
       type: row['type'] as String? ?? 'NORMAL',
       paymentMethod: PaymentMethod.fromString(row['paymentMethod'] as String?),
-      receivedAt: DateTime.parse(row['receivedAt'] as String),
-      loanId: row['loan'] as String,
-      createdAt: DateTime.parse(row['createdAt'] as String),
+      receivedAt: row['receivedAt'] != null
+          ? DateTime.tryParse(row['receivedAt'].toString()) ?? now
+          : now,
+      loanId: (row['loan'] as String?) ?? '',
+      createdAt: row['createdAt'] != null
+          ? DateTime.tryParse(row['createdAt'].toString()) ?? now
+          : now,
     );
   }
 

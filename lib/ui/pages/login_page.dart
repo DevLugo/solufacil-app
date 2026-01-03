@@ -2,14 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:powersync/powersync.dart' show SyncStatus;
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/utils/formatters.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/powersync_provider.dart';
+import '../widgets/sync_status_indicator.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -23,6 +21,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isTransitioning = false;
 
   @override
   void dispose() {
@@ -41,15 +40,22 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         await ref.read(authProvider.notifier).login(email, password);
 
     if (success && mounted) {
-      context.go(AppRoutes.dashboard);
+      // Keep UI locked while transitioning to dashboard
+      setState(() => _isTransitioning = true);
+      // The router redirect will handle navigation automatically
+      // Just wait a moment to let the router react to auth state change
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (mounted) {
+        context.go(AppRoutes.dashboard);
+      }
     }
   }
+
+  bool get _isLoading => ref.watch(authProvider).isLoading || _isTransitioning;
 
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
-    final syncStatus = ref.watch(syncStatusProvider);
-    final lastSync = ref.watch(lastSyncTimeProvider);
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
@@ -96,7 +102,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: AppColors.textSecondary,
+                        color: _isLoading ? AppColors.textMuted : AppColors.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -105,6 +111,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
                       autocorrect: false,
+                      enabled: !_isLoading,
                       style: TextStyle(
                         fontSize: 16,
                         color: AppColors.secondary,
@@ -131,7 +138,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: AppColors.textSecondary,
+                        color: _isLoading ? AppColors.textMuted : AppColors.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -139,7 +146,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       controller: _passwordController,
                       obscureText: _obscurePassword,
                       textInputAction: TextInputAction.done,
-                      onFieldSubmitted: (_) => _handleLogin(),
+                      onFieldSubmitted: _isLoading ? null : (_) => _handleLogin(),
+                      enabled: !_isLoading,
                       style: TextStyle(
                         fontSize: 16,
                         color: AppColors.secondary,
@@ -154,7 +162,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             color: AppColors.textSecondary,
                             size: 20,
                           ),
-                          onPressed: () {
+                          onPressed: _isLoading ? null : () {
                             setState(() {
                               _obscurePassword = !_obscurePassword;
                             });
@@ -175,7 +183,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     Align(
                       alignment: Alignment.centerLeft,
                       child: TextButton(
-                        onPressed: () {},
+                        onPressed: _isLoading ? null : () {},
                         style: TextButton.styleFrom(
                           padding: EdgeInsets.zero,
                           minimumSize: Size.zero,
@@ -185,7 +193,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           '¿Olvidaste tu contraseña?',
                           style: TextStyle(
                             fontSize: 14,
-                            color: AppColors.textSecondary,
+                            color: _isLoading ? AppColors.textMuted : AppColors.textSecondary,
                           ),
                         ),
                       ),
@@ -232,23 +240,38 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       decoration: BoxDecoration(
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.primary.withOpacity(0.2),
+                            color: AppColors.primary.withOpacity(_isLoading ? 0.1 : 0.2),
                             blurRadius: 20,
                             offset: const Offset(0, 8),
                           ),
                         ],
                       ),
                       child: ElevatedButton(
-                        onPressed: authState.isLoading ? null : _handleLogin,
-                        child: authState.isLoading
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white),
-                                ),
+                        onPressed: _isLoading ? null : _handleLogin,
+                        child: _isLoading
+                            ? Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                          Colors.white),
+                                    ),
+                                  ),
+                                  if (_isTransitioning) ...[
+                                    const SizedBox(width: 12),
+                                    const Text(
+                                      'Entrando...',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               )
                             : const Text(
                                 'Iniciar Sesión',
@@ -262,44 +285,45 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
                     const SizedBox(height: 32),
 
-                    // Sync status
-                    _SyncStatusCard(
-                      syncStatus: syncStatus,
-                      lastSync: lastSync,
-                    ),
+                    // Sync status (hide during transition)
+                    if (!_isTransitioning)
+                      const SyncStatusIndicator(
+                        mode: SyncStatusDisplayMode.full,
+                      ),
 
                     const SizedBox(height: 24),
 
                     // Register link
-                    Center(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            '¿No tienes cuenta? ',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {},
-                            style: TextButton.styleFrom(
-                              padding: EdgeInsets.zero,
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            child: const Text(
-                              'Regístrate',
+                    if (!_isLoading)
+                      Center(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              '¿No tienes cuenta? ',
                               style: TextStyle(
                                 fontSize: 14,
-                                fontWeight: FontWeight.w600,
+                                color: AppColors.textSecondary,
                               ),
                             ),
-                          ),
-                        ],
+                            TextButton(
+                              onPressed: () {},
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              child: const Text(
+                                'Regístrate',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
 
                     const SizedBox(height: 32),
                   ],
@@ -414,145 +438,3 @@ class _CurvePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// Sync status card
-class _SyncStatusCard extends StatelessWidget {
-  final AsyncValue<SyncStatus> syncStatus;
-  final DateTime? lastSync;
-
-  const _SyncStatusCard({
-    required this.syncStatus,
-    required this.lastSync,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          // Status icon
-          syncStatus.when(
-            data: (status) {
-              if (status.connected) {
-                return _buildIcon(LucideIcons.cloud, AppColors.success);
-              } else if (status.connecting) {
-                return _buildLoadingIcon();
-              } else {
-                return _buildIcon(LucideIcons.cloudOff, AppColors.textMuted);
-              }
-            },
-            loading: () => _buildLoadingIcon(),
-            error: (_, __) =>
-                _buildIcon(LucideIcons.cloudOff, AppColors.textMuted),
-          ),
-
-          const SizedBox(width: 16),
-
-          // Status text
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      'Sincronización',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.secondary,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    syncStatus.when(
-                      data: (status) => _buildStatusBadge(status),
-                      loading: () =>
-                          _buildStatusBadge(const SyncStatus(connecting: true)),
-                      error: (_, __) => _buildStatusBadge(const SyncStatus()),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  lastSync != null
-                      ? 'Última: ${Formatters.relativeTime(lastSync!)}'
-                      : 'Sin sincronizar aún',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildIcon(IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-      ),
-      child: Icon(icon, color: color, size: 20),
-    );
-  }
-
-  Widget _buildLoadingIcon() {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-      ),
-      child: const SizedBox(
-        width: 20,
-        height: 20,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusBadge(SyncStatus status) {
-    Color color;
-    String text;
-
-    if (status.connected) {
-      color = AppColors.success;
-      text = 'Conectado';
-    } else if (status.connecting) {
-      color = AppColors.primary;
-      text = 'Conectando...';
-    } else {
-      color = AppColors.textMuted;
-      text = 'Offline';
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: color,
-        ),
-      ),
-    );
-  }
-}
