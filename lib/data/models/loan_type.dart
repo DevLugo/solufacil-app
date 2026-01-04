@@ -8,6 +8,8 @@ class LoanType extends Equatable {
   final double rate;
   final double initialComissionRate;
   final double renewComissionRate;
+  final double loanPaymentComission;  // Commission per payment collected
+  final double loanGrantedComission;  // Commission for granting loan
 
   const LoanType({
     required this.id,
@@ -16,6 +18,8 @@ class LoanType extends Equatable {
     required this.rate,
     required this.initialComissionRate,
     required this.renewComissionRate,
+    required this.loanPaymentComission,
+    required this.loanGrantedComission,
   });
 
   /// Get commission rate based on whether it's a renewal
@@ -43,6 +47,8 @@ class LoanType extends Equatable {
       rate: (row['rate'] as num?)?.toDouble() ?? 0,
       initialComissionRate: (row['initialComissionRate'] as num?)?.toDouble() ?? 0,
       renewComissionRate: (row['renewComissionRate'] as num?)?.toDouble() ?? 0,
+      loanPaymentComission: (row['loanPaymentComission'] as num?)?.toDouble() ?? 0,
+      loanGrantedComission: (row['loanGrantedComission'] as num?)?.toDouble() ?? 0,
     );
   }
 
@@ -54,5 +60,7 @@ class LoanType extends Equatable {
         rate,
         initialComissionRate,
         renewComissionRate,
+        loanPaymentComission,
+        loanGrantedComission,
       ];
 }

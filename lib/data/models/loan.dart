@@ -63,6 +63,7 @@ class Loan extends Equatable {
   // Loan type info
   final int? weekDuration;
   final double? rate;
+  final double? loanPaymentComission;  // Commission per payment from LoanType
 
   // Related data (populated from joins)
   final String? borrowerName;
@@ -95,6 +96,7 @@ class Loan extends Equatable {
     required this.updatedAt,
     this.weekDuration,
     this.rate,
+    this.loanPaymentComission,
     this.borrowerName,
     this.leadName,
     this.leadLocality,
@@ -140,6 +142,7 @@ class Loan extends Equatable {
     List<LoanPayment> payments = const [],
     int? weekDuration,
     double? rate,
+    double? loanPaymentComission,
   }) {
     // Safely parse dates with null checks
     DateTime parseDate(dynamic value, DateTime fallback) {
@@ -181,6 +184,7 @@ class Loan extends Equatable {
       updatedAt: parseDate(row['updatedAt'], now),
       weekDuration: weekDuration,
       rate: rate,
+      loanPaymentComission: loanPaymentComission,
       borrowerName: borrowerName,
       leadName: leadName,
       leadLocality: leadLocality,
@@ -214,6 +218,7 @@ class Loan extends Equatable {
         updatedAt,
         weekDuration,
         rate,
+        loanPaymentComission,
         borrowerName,
         leadName,
         leadLocality,
@@ -251,6 +256,7 @@ enum PaymentMethod {
 class LoanPayment extends Equatable {
   final String id;
   final double amount;
+  final double comission;
   final String type;
   final PaymentMethod paymentMethod;
   final DateTime receivedAt;
@@ -260,6 +266,7 @@ class LoanPayment extends Equatable {
   const LoanPayment({
     required this.id,
     required this.amount,
+    this.comission = 0,
     required this.type,
     required this.paymentMethod,
     required this.receivedAt,
@@ -272,6 +279,7 @@ class LoanPayment extends Equatable {
     return LoanPayment(
       id: (row['id'] as String?) ?? '',
       amount: (row['amount'] as num?)?.toDouble() ?? 0,
+      comission: (row['comission'] as num?)?.toDouble() ?? 0,
       type: row['type'] as String? ?? 'NORMAL',
       paymentMethod: PaymentMethod.fromString(row['paymentMethod'] as String?),
       receivedAt: row['receivedAt'] != null
@@ -288,6 +296,7 @@ class LoanPayment extends Equatable {
   List<Object?> get props => [
         id,
         amount,
+        comission,
         type,
         paymentMethod,
         receivedAt,

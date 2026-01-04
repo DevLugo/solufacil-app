@@ -105,6 +105,7 @@ class LoanRepository {
         l.*,
         lt.weekDuration,
         lt.rate,
+        lt.loanPaymentComission,
         pd.fullName as borrowerName
       FROM Loan l
       JOIN Borrower b ON l.borrower = b.id
@@ -126,6 +127,7 @@ class LoanRepository {
       payments: payments,
       weekDuration: row['weekDuration'] as int?,
       rate: (row['rate'] as num?)?.toDouble(),
+      loanPaymentComission: (row['loanPaymentComission'] as num?)?.toDouble(),
     );
   }
 
@@ -136,6 +138,7 @@ class LoanRepository {
         l.*,
         lt.weekDuration,
         lt.rate,
+        lt.loanPaymentComission,
         pd.fullName as borrowerName
       FROM Loan l
       JOIN Borrower b ON l.borrower = b.id
@@ -157,6 +160,7 @@ class LoanRepository {
       payments: payments,
       weekDuration: row['weekDuration'] as int?,
       rate: (row['rate'] as num?)?.toDouble(),
+      loanPaymentComission: (row['loanPaymentComission'] as num?)?.toDouble(),
     );
   }
 
@@ -171,6 +175,7 @@ class LoanRepository {
         l.*,
         lt.weekDuration,
         lt.rate,
+        lt.loanPaymentComission,
         lt.name as loantypeName,
         pd.fullName as borrowerName,
         (SELECT pd2.fullName FROM Employee e
@@ -200,6 +205,7 @@ class LoanRepository {
         payments: payments,
         weekDuration: row['weekDuration'] as int?,
         rate: (row['rate'] as num?)?.toDouble(),
+        loanPaymentComission: (row['loanPaymentComission'] as num?)?.toDouble(),
       ));
     }
 
@@ -213,6 +219,7 @@ class LoanRepository {
         l.*,
         lt.weekDuration,
         lt.rate,
+        lt.loanPaymentComission,
         pd.fullName as borrowerName,
         (SELECT pd2.fullName FROM Employee e
          JOIN PersonalData pd2 ON e.personalData = pd2.id
@@ -238,6 +245,7 @@ class LoanRepository {
       payments: payments,
       weekDuration: row['weekDuration'] as int?,
       rate: (row['rate'] as num?)?.toDouble(),
+      loanPaymentComission: (row['loanPaymentComission'] as num?)?.toDouble(),
     );
   }
 

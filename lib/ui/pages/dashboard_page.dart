@@ -206,8 +206,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   // Navigation when locality is selected (work mode)
   void _handleWorkNavigation(int index) {
     switch (index) {
-      case 0: // Cobranza
-        context.push(AppRoutes.selectLocation);
+      case 0: // Cobranza - go directly to client list (locality already selected)
+        context.push(AppRoutes.clientList);
         break;
       case 1: // Créditos
         context.push(AppRoutes.creditsToday);

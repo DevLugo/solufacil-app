@@ -102,6 +102,8 @@ const schema = Schema([
     Column.real('rate'),
     Column.real('initialComissionRate'),
     Column.real('renewComissionRate'),
+    Column.real('loanPaymentComission'), // Commission per payment collected
+    Column.real('loanGrantedComission'), // Commission for granting loan
   ]),
 
   // LoanCollaterals - Many-to-many relationship (Loan <-> PersonalData as collateral)
@@ -162,6 +164,7 @@ const schema = Schema([
   // LoanPayment table - Individual payments on a loan
   Table('LoanPayment', [
     Column.real('amount'),
+    Column.real('comission'), // Commission for the collector
     Column.text('type'), // NORMAL, EXTRA
     Column.text('paymentMethod'), // CASH, MONEY_TRANSFER
     Column.text('receivedAt'),
