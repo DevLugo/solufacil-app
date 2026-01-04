@@ -21,15 +21,32 @@ class ClientHistoryRepository {
 
     // Security filter: Non-admin users cannot see PersonalData of people with User accounts
     // This matches the API's isAdmin filtering logic
-    final securityFilter = isAdmin
-        ? ''
-        : '''
-          AND NOT EXISTS (
-            SELECT 1 FROM Employee e
-            JOIN User u ON u.employee = e.id
-            WHERE e.personalData = pd.id
-          )
-        ''';
+    // Note: Only apply filter if Employee.user column exists (requires updated sync rules)
+    String securityFilter = '';
+    print('[ClientHistory] searchClients - isAdmin: $isAdmin');
+    if (!isAdmin) {
+      try {
+        // Check if Employee table has user column
+        final hasUserColumn = await _db.execute(
+          "SELECT 1 FROM pragma_table_info('Employee') WHERE name = 'user' LIMIT 1"
+        );
+        print('[ClientHistory] Employee.user column exists: ${hasUserColumn.isNotEmpty}');
+        if (hasUserColumn.isNotEmpty) {
+          securityFilter = '''
+            AND NOT EXISTS (
+              SELECT 1 FROM Employee e
+              WHERE e.personalData = pd.id
+              AND e.user IS NOT NULL
+            )
+          ''';
+          print('[ClientHistory] Security filter applied');
+        } else {
+          print('[ClientHistory] WARNING: Employee.user column not found - security filter NOT applied');
+        }
+      } catch (e) {
+        print('[ClientHistory] ERROR checking column: $e');
+      }
+    }
 
     // Search in PersonalData with related counts
     final results = await _db.execute('''
@@ -81,17 +98,28 @@ class ClientHistoryRepository {
     print('[ClientHistory] Loading history for: $personalDataId (isAdmin: $isAdmin)');
 
     // Security check: Non-admin users cannot view PersonalData of people with User accounts
+    // Note: Only apply check if Employee.user column exists (requires updated sync rules)
     if (!isAdmin) {
-      final hasUserAccount = await _db.execute('''
-        SELECT 1 FROM Employee e
-        JOIN User u ON u.employee = e.id
-        WHERE e.personalData = ?
-        LIMIT 1
-      ''', [personalDataId]);
+      try {
+        // Check if Employee table has user column
+        final hasUserColumn = await _db.execute(
+          "SELECT 1 FROM pragma_table_info('Employee') WHERE name = 'user' LIMIT 1"
+        );
+        if (hasUserColumn.isNotEmpty) {
+          final hasUserAccount = await _db.execute('''
+            SELECT 1 FROM Employee e
+            WHERE e.personalData = ?
+            AND e.user IS NOT NULL
+            LIMIT 1
+          ''', [personalDataId]);
 
-      if (hasUserAccount.isNotEmpty) {
-        print('[ClientHistory] Access denied: PersonalData has associated User account');
-        return null;
+          if (hasUserAccount.isNotEmpty) {
+            print('[ClientHistory] Access denied: PersonalData has associated User account');
+            return null;
+          }
+        }
+      } catch (_) {
+        // If check fails, skip the security filter
       }
     }
 

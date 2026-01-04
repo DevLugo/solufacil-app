@@ -2239,25 +2239,7 @@ class _SyncStatusBanner extends ConsumerWidget {
   Widget _buildBanner(ExtendedSyncStatus extStatus, DateTime? lastSync) {
     final status = extStatus.status;
 
-    // Check for errors first - highest priority
-    if (extStatus.hasRecentError) {
-      if (extStatus.isAuthError) {
-        return _ErrorBanner(
-          icon: LucideIcons.keyRound,
-          title: 'Error de autenticación',
-          message: 'No se puede sincronizar. Verifica tu conexión.',
-          color: AppColors.error,
-        );
-      }
-      return _ErrorBanner(
-        icon: LucideIcons.alertTriangle,
-        title: 'Error de sincronización',
-        message: 'Reintentando conexión...',
-        color: AppColors.warning,
-      );
-    }
-
-    // Check if actively syncing
+    // PRIORITY 1: Check if actively syncing (show sync status even if there was a recent error)
     if (status.downloading) {
       return _SyncingBanner(
         icon: LucideIcons.download,
@@ -2284,6 +2266,24 @@ class _SyncStatusBanner extends ConsumerWidget {
       return _SyncingBanner(
         icon: LucideIcons.cloud,
         message: 'Sincronización inicial en progreso...',
+      );
+    }
+
+    // PRIORITY 2: Check for errors (only if not actively syncing)
+    if (extStatus.hasRecentError) {
+      if (extStatus.isAuthError) {
+        return _ErrorBanner(
+          icon: LucideIcons.keyRound,
+          title: 'Error de autenticación',
+          message: 'No se puede sincronizar. Verifica tu conexión.',
+          color: AppColors.error,
+        );
+      }
+      return _ErrorBanner(
+        icon: LucideIcons.alertTriangle,
+        title: 'Error de sincronización',
+        message: 'Reintentando conexión...',
+        color: AppColors.warning,
       );
     }
 

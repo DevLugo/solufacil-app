@@ -81,7 +81,9 @@ class ClientSearchNotifier extends StateNotifier<SearchState> {
 
       // Check if user is admin for role-based filtering
       final authState = _ref.read(authProvider);
-      final isAdmin = authState.user?.role == 'ADMIN';
+      final userRole = authState.user?.role;
+      final isAdmin = userRole == 'ADMIN';
+      print('[ClientSearch] User role: $userRole, isAdmin: $isAdmin');
 
       final results = await repository.searchClients(query, isAdmin: isAdmin);
 

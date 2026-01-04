@@ -225,7 +225,11 @@ class _CreateCreditPageState extends ConsumerState<CreateCreditPage> {
       case CreditWizardStep.signature:
         return StepSignature(state: state, notifier: notifier);
       case CreditWizardStep.fingerprints:
-        return StepFingerprints(state: state, notifier: notifier);
+        return StepFingerprints(
+          state: state,
+          notifier: notifier,
+          isRenewal: state.isRenewal,
+        );
       case CreditWizardStep.videoRecording:
         return StepVideo(state: state, notifier: notifier);
       case CreditWizardStep.confirmation:

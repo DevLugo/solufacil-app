@@ -11,14 +11,17 @@ import '../../../providers/collector_dashboard_provider.dart';
 import 'create_credit_page.dart';
 
 /// Step 7: Biometric verification (fingerprint/face)
+/// For renewals (renovaciones), fingerprint verification is MANDATORY
 class StepFingerprints extends ConsumerStatefulWidget {
   final CreateCreditState state;
   final CreateCreditNotifier notifier;
+  final bool isRenewal;
 
   const StepFingerprints({
     super.key,
     required this.state,
     required this.notifier,
+    this.isRenewal = false,
   });
 
   @override
@@ -151,6 +154,52 @@ class _StepFingerprintsState extends ConsumerState<StepFingerprints> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Renewal mandatory warning banner
+                if (widget.isRenewal) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.error.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          LucideIcons.alertCircle,
+                          size: 24,
+                          color: AppColors.error,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'RENOVACIÓN - Verificación Obligatoria',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.error,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'La huella digital del cliente es requerida para continuar',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.error.withOpacity(0.8),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
                 // Header
                 const Text(
                   'Verificación Biométrica',
@@ -162,10 +211,13 @@ class _StepFingerprintsState extends ConsumerState<StepFingerprints> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Verifica la identidad usando ${_getBiometricTypeText()}',
+                  widget.isRenewal
+                      ? 'Verificación obligatoria usando ${_getBiometricTypeText()}'
+                      : 'Verifica la identidad usando ${_getBiometricTypeText()}',
                   style: TextStyle(
                     fontSize: 14,
-                    color: AppColors.textSecondary,
+                    color: widget.isRenewal ? AppColors.error : AppColors.textSecondary,
+                    fontWeight: widget.isRenewal ? FontWeight.w500 : FontWeight.normal,
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -272,6 +324,69 @@ class _StepFingerprintsState extends ConsumerState<StepFingerprints> {
   }
 
   Widget _buildNoBiometricsWarning() {
+    // For renewals, cannot skip - must have biometrics
+    if (widget.isRenewal) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.errorSurfaceLight,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.error.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              LucideIcons.shieldAlert,
+              size: 48,
+              color: AppColors.error,
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Verificación Obligatoria',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: AppColors.error,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Para renovaciones, la verificación biométrica es OBLIGATORIA.\n\nEste dispositivo no tiene sensor biométrico configurado. Por favor usa otro dispositivo con huella digital.',
+              style: TextStyle(
+                fontSize: 14,
+                color: AppColors.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.error.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(LucideIcons.info, size: 16, color: AppColors.error),
+                  const SizedBox(width: 8),
+                  Text(
+                    'No puedes continuar sin verificación',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.error,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // For new credits, can skip
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(

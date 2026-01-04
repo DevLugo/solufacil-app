@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:powersync/powersync.dart';
 import '../core/config/powersync_config.dart';
@@ -37,7 +39,7 @@ class ExtendedSyncStatus {
       lastError?.contains('Authorization') == true;
 }
 
-/// Sync status provider with error tracking
+/// Sync status provider with error tracking and wakelock management
 final syncStatusProvider = StreamProvider<ExtendedSyncStatus>((ref) async* {
   final dbAsyncValue = ref.watch(powerSyncDatabaseProvider);
 
@@ -49,6 +51,26 @@ final syncStatusProvider = StreamProvider<ExtendedSyncStatus>((ref) async* {
 
   String? lastError;
   DateTime? lastErrorTime;
+  bool wakelockEnabled = false;
+  bool wasSyncing = false;
+  DateTime? previousSyncTime;
+
+  // Platform channel for wakelock (native Android/iOS)
+  const wakelockChannel = MethodChannel('solufacil/wakelock');
+
+  // Helper to manage wakelock using native platform channel
+  Future<void> updateWakelock(bool shouldBeEnabled) async {
+    if (shouldBeEnabled != wakelockEnabled) {
+      try {
+        await wakelockChannel.invokeMethod(shouldBeEnabled ? 'enable' : 'disable');
+        wakelockEnabled = shouldBeEnabled;
+        debugPrint('[PowerSync] Wakelock ${shouldBeEnabled ? "ENABLED" : "DISABLED"}');
+      } catch (e) {
+        // Wakelock not implemented on this platform, that's OK
+        debugPrint('[PowerSync] Wakelock not available: $e');
+      }
+    }
+  }
 
   await for (final status in db.statusStream) {
     // Check for errors in the status
@@ -61,12 +83,53 @@ final syncStatusProvider = StreamProvider<ExtendedSyncStatus>((ref) async* {
       lastErrorTime = null;
     }
 
+    // Determine if actively syncing
+    final isSyncing = status.downloading || status.uploading || status.connecting ||
+        (status.connected && status.lastSyncedAt == null);
+
+    // Manage wakelock based on sync state
+    await updateWakelock(isSyncing);
+
+    // Detect sync completion (was syncing, now has a new sync time)
+    final syncJustCompleted = wasSyncing &&
+        !isSyncing &&
+        status.lastSyncedAt != null &&
+        (previousSyncTime == null || status.lastSyncedAt != previousSyncTime);
+
+    if (syncJustCompleted) {
+      debugPrint('[PowerSync] Sync completed! Triggering data refresh...');
+      // Notify that sync completed - this triggers route refresh
+      ref.read(syncCompletedNotifierProvider.notifier).notifySyncCompleted();
+    }
+
+    // Update tracking state
+    wasSyncing = isSyncing;
+    previousSyncTime = status.lastSyncedAt;
+
     yield ExtendedSyncStatus(
       status: status,
       lastError: lastError,
       lastErrorTime: lastErrorTime,
     );
   }
+
+  // Cleanup: disable wakelock when stream ends
+  await updateWakelock(false);
+});
+
+/// Notifier to track sync completion events
+/// Other providers can watch this to refresh data after sync
+class SyncCompletedNotifier extends StateNotifier<int> {
+  SyncCompletedNotifier() : super(0);
+
+  void notifySyncCompleted() {
+    state = state + 1; // Increment to trigger watchers
+    debugPrint('[PowerSync] SyncCompletedNotifier: sync count = $state');
+  }
+}
+
+final syncCompletedNotifierProvider = StateNotifierProvider<SyncCompletedNotifier, int>((ref) {
+  return SyncCompletedNotifier();
 });
 
 /// Last sync time provider

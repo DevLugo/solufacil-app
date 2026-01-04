@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
@@ -10,6 +11,29 @@ import '../../../core/theme/colors.dart';
 import '../../../providers/create_credit_provider.dart';
 import '../../../providers/collector_dashboard_provider.dart';
 import 'create_credit_page.dart';
+
+/// Laplacian variance threshold for blur detection
+/// Values BELOW this threshold indicate a blurry image
+/// Based on OpenCV best practices: ~100 is the standard threshold
+/// Lower values = more strict (rejects more photos)
+const double _blurThreshold = 100.0;
+
+/// Result of blur analysis
+class _BlurAnalysisResult {
+  final double variance;
+  final bool isBlurry;
+
+  _BlurAnalysisResult({required this.variance, required this.isBlurry});
+
+  /// Convert variance to a 0-100 quality score for display
+  /// Maps: 0 variance -> 0%, 100 variance -> 50%, 500+ variance -> 100%
+  int get qualityPercent {
+    if (variance <= 0) return 0;
+    if (variance >= 500) return 100;
+    // Linear mapping: variance 100 = 50%
+    return ((variance / 500) * 100).round().clamp(0, 100);
+  }
+}
 
 /// Step 5: Document photos (INE, proof of address, promissory note)
 class StepDocuments extends ConsumerStatefulWidget {
@@ -29,6 +53,220 @@ class StepDocuments extends ConsumerStatefulWidget {
 class _StepDocumentsState extends ConsumerState<StepDocuments> {
   final _imagePicker = ImagePicker();
   bool _isCapturing = false;
+  bool _isAnalyzing = false;
+
+  /// Analyze image quality using Laplacian variance method
+  /// Returns the Laplacian variance - higher values mean sharper image
+  /// Based on OpenCV best practice: variance < 100 = blurry
+  /// Reference: https://www.geeksforgeeks.org/computer-vision/how-to-check-for-blurry-images-in-your-dataset-using-the-laplacian-method/
+  Future<_BlurAnalysisResult> _analyzeImageQuality(String imagePath) async {
+    try {
+      final bytes = await File(imagePath).readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final image = frame.image;
+
+      final width = image.width;
+      final height = image.height;
+
+      debugPrint('[BlurDetection] Analyzing image: ${width}x$height');
+
+      // Get pixel data
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (byteData == null) {
+        debugPrint('[BlurDetection] Could not get byte data');
+        return _BlurAnalysisResult(variance: 200, isBlurry: false); // Assume OK
+      }
+
+      final pixels = byteData.buffer.asUint8List();
+
+      // Convert to grayscale array for Laplacian calculation
+      final grayscale = List<double>.filled(width * height, 0);
+      for (int i = 0; i < width * height; i++) {
+        final idx = i * 4;
+        if (idx + 2 < pixels.length) {
+          // Standard grayscale conversion (ITU-R BT.601)
+          grayscale[i] = pixels[idx] * 0.299 + pixels[idx + 1] * 0.587 + pixels[idx + 2] * 0.114;
+        }
+      }
+
+      // Apply Laplacian operator (3x3 kernel: [0,1,0], [1,-4,1], [0,1,0])
+      // and collect all Laplacian values
+      final laplacianValues = <double>[];
+
+      for (int y = 1; y < height - 1; y++) {
+        for (int x = 1; x < width - 1; x++) {
+          final center = grayscale[y * width + x];
+          final up = grayscale[(y - 1) * width + x];
+          final down = grayscale[(y + 1) * width + x];
+          final left = grayscale[y * width + (x - 1)];
+          final right = grayscale[y * width + (x + 1)];
+
+          // Laplacian = 4*center - up - down - left - right
+          final laplacian = 4 * center - up - down - left - right;
+          laplacianValues.add(laplacian);
+        }
+      }
+
+      if (laplacianValues.isEmpty) {
+        return _BlurAnalysisResult(variance: 200, isBlurry: false);
+      }
+
+      // Calculate variance: Var(X) = E[X²] - E[X]²
+      double sum = 0;
+      double sumSq = 0;
+      for (final val in laplacianValues) {
+        sum += val;
+        sumSq += val * val;
+      }
+
+      final mean = sum / laplacianValues.length;
+      final variance = (sumSq / laplacianValues.length) - (mean * mean);
+
+      // Determine if blurry based on threshold
+      final isBlurry = variance < _blurThreshold;
+
+      debugPrint('[BlurDetection] Laplacian variance: ${variance.toStringAsFixed(2)}');
+      debugPrint('[BlurDetection] Threshold: $_blurThreshold');
+      debugPrint('[BlurDetection] Is blurry: $isBlurry');
+
+      return _BlurAnalysisResult(variance: variance, isBlurry: isBlurry);
+    } catch (e, stack) {
+      debugPrint('[BlurDetection] Error: $e');
+      debugPrint('[BlurDetection] Stack: $stack');
+      return _BlurAnalysisResult(variance: 200, isBlurry: false); // Assume OK on error
+    }
+  }
+
+  /// Show dialog asking user to retake blurry photo
+  Future<bool> _showBlurryPhotoDialog(_BlurAnalysisResult analysis) async {
+    final qualityPercent = analysis.qualityPercent;
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(LucideIcons.alertTriangle, color: AppColors.error, size: 28),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text('Foto Borrosa', style: TextStyle(fontSize: 18)),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'La foto está desenfocada y puede ser ilegible.',
+              style: TextStyle(fontSize: 15),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.errorSurfaceLight,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      const Text('Nitidez: ', style: TextStyle(fontWeight: FontWeight.w500)),
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: qualityPercent / 100,
+                            backgroundColor: AppColors.border,
+                            valueColor: AlwaysStoppedAnimation<Color>(AppColors.error),
+                            minHeight: 8,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '$qualityPercent%',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Varianza: ${analysis.variance.toStringAsFixed(0)} (mínimo requerido: ${_blurThreshold.toInt()})',
+                    style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.infoSurfaceLight,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(LucideIcons.lightbulb, size: 16, color: AppColors.info),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Consejos para mejor foto:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.info,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '• Buena iluminación (sin sombras)\n'
+                    '• Mantén el celular firme\n'
+                    '• Espera a que enfoque antes de capturar\n'
+                    '• Evita movimiento al tomar la foto',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              'Usar de todos modos',
+              style: TextStyle(color: AppColors.textMuted),
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context, false),
+            icon: const Icon(LucideIcons.camera, size: 18),
+            label: const Text('Tomar otra'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
 
   Future<String?> _capturePhoto() async {
     if (_isCapturing) return null;
@@ -45,6 +283,23 @@ class _StepDocumentsState extends ConsumerState<StepDocuments> {
 
       if (image == null) return null;
 
+      // Analyze image quality using Laplacian variance
+      setState(() => _isAnalyzing = true);
+      final analysis = await _analyzeImageQuality(image.path);
+      setState(() => _isAnalyzing = false);
+
+      // If image is blurry, ask user what to do
+      if (analysis.isBlurry) {
+        final useAnyway = await _showBlurryPhotoDialog(analysis);
+        if (!useAnyway) {
+          // User wants to retake - delete temp file and return null
+          try {
+            await File(image.path).delete();
+          } catch (_) {}
+          return null;
+        }
+      }
+
       // Save to app documents directory
       final appDir = await getApplicationDocumentsDirectory();
       final fileName = 'doc_${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -59,6 +314,23 @@ class _StepDocumentsState extends ConsumerState<StepDocuments> {
       // Copy file to permanent location
       await File(image.path).copy(savedPath);
 
+      // Show success message if quality was good
+      if (!analysis.isBlurry && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(LucideIcons.checkCircle, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text('Foto capturada (Nitidez: ${analysis.qualityPercent}%)'),
+              ],
+            ),
+            backgroundColor: AppColors.success,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+
       return savedPath;
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -69,7 +341,10 @@ class _StepDocumentsState extends ConsumerState<StepDocuments> {
       );
       return null;
     } finally {
-      setState(() => _isCapturing = false);
+      setState(() {
+        _isCapturing = false;
+        _isAnalyzing = false;
+      });
     }
   }
 
@@ -128,6 +403,7 @@ class _StepDocumentsState extends ConsumerState<StepDocuments> {
                   imagePath: docs?.borrowerIneFrontPath,
                   isRequired: true,
                   isCapturing: _isCapturing,
+                  isAnalyzing: _isAnalyzing,
                   onCapture: () async {
                     final path = await _capturePhoto();
                     if (path != null) {
@@ -148,6 +424,7 @@ class _StepDocumentsState extends ConsumerState<StepDocuments> {
                   imagePath: docs?.borrowerIneBackPath,
                   isRequired: true,
                   isCapturing: _isCapturing,
+                  isAnalyzing: _isAnalyzing,
                   onCapture: () async {
                     final path = await _capturePhoto();
                     if (path != null) {
@@ -166,6 +443,7 @@ class _StepDocumentsState extends ConsumerState<StepDocuments> {
                   imagePath: docs?.borrowerProofOfAddressPath,
                   isRequired: true,
                   isCapturing: _isCapturing,
+                  isAnalyzing: _isAnalyzing,
                   onCapture: () async {
                     final path = await _capturePhoto();
                     if (path != null) {
@@ -184,6 +462,7 @@ class _StepDocumentsState extends ConsumerState<StepDocuments> {
                   imagePath: docs?.signedPromissoryNotePath,
                   isRequired: false,
                   isCapturing: _isCapturing,
+                  isAnalyzing: _isAnalyzing,
                   onCapture: () async {
                     final path = await _capturePhoto();
                     if (path != null) {
@@ -213,6 +492,7 @@ class _StepDocumentsState extends ConsumerState<StepDocuments> {
                     imagePath: docs?.collateralIneFrontPath,
                     isRequired: false,
                     isCapturing: _isCapturing,
+                    isAnalyzing: _isAnalyzing,
                     onCapture: () async {
                       final path = await _capturePhoto();
                       if (path != null) {
@@ -231,6 +511,7 @@ class _StepDocumentsState extends ConsumerState<StepDocuments> {
                     imagePath: docs?.collateralIneBackPath,
                     isRequired: false,
                     isCapturing: _isCapturing,
+                    isAnalyzing: _isAnalyzing,
                     onCapture: () async {
                       final path = await _capturePhoto();
                       if (path != null) {
@@ -249,6 +530,7 @@ class _StepDocumentsState extends ConsumerState<StepDocuments> {
                     imagePath: docs?.collateralProofOfAddressPath,
                     isRequired: false,
                     isCapturing: _isCapturing,
+                    isAnalyzing: _isAnalyzing,
                     onCapture: () async {
                       final path = await _capturePhoto();
                       if (path != null) {
@@ -352,6 +634,7 @@ class _DocumentPhotoCard extends StatelessWidget {
   final String? imagePath;
   final bool isRequired;
   final bool isCapturing;
+  final bool isAnalyzing;
   final VoidCallback onCapture;
   final VoidCallback onClear;
 
@@ -362,6 +645,7 @@ class _DocumentPhotoCard extends StatelessWidget {
     required this.imagePath,
     required this.isRequired,
     required this.isCapturing,
+    this.isAnalyzing = false,
     required this.onCapture,
     required this.onClear,
   });
@@ -471,11 +755,26 @@ class _DocumentPhotoCard extends StatelessWidget {
                   ),
                 ),
                 // Action
-                if (isCapturing)
-                  const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                if (isCapturing || isAnalyzing)
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      if (isAnalyzing) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Analizando...',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ],
                   )
                 else if (hasImage)
                   IconButton(

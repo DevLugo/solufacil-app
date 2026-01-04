@@ -1,9 +1,12 @@
 import 'package:powersync/powersync.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 import '../../data/schema.dart';
 import 'app_config.dart';
+
+const String _lastUserIdKey = 'powersync_last_user_id';
 
 /// PowerSync database connector
 class PowerSyncConnector extends PowerSyncBackendConnector {
@@ -134,23 +137,67 @@ class PowerSyncManager {
   }
 
   /// Disconnect and reconnect (useful after login)
+  /// If userId is different from last login, clears the database for full sync
   static Future<void> reconnect({
     required FlutterSecureStorage storage,
     required Dio dio,
+    String? userId,
   }) async {
-    if (_database != null) {
-      // Disconnect but keep local data (use disconnect() not disconnectAndClear())
-      // This preserves the cache so subsequent logins don't re-download everything
-      await _database!.disconnect();
-
-      // Create new connector with fresh credentials
-      final connector = PowerSyncConnector(
-        storage: storage,
-        dio: dio,
-      );
-
-      // Reconnect - will only sync delta changes
-      _database!.connect(connector: connector);
+    if (_database == null) {
+      // Database not initialized yet, let getDatabase handle it
+      return;
     }
+
+    // Check if user changed
+    final prefs = await SharedPreferences.getInstance();
+    final lastUserId = prefs.getString(_lastUserIdKey);
+    final userChanged = userId != null && lastUserId != null && userId != lastUserId;
+
+    print('[PowerSync] Reconnecting - Current user: $userId, Last user: $lastUserId, Changed: $userChanged');
+
+    if (userChanged) {
+      // Different user - clear all local data and do full sync
+      print('[PowerSync] User changed! Clearing local database for full sync...');
+      await _database!.disconnectAndClear();
+
+      // Reset the database instance so it gets recreated
+      _database = null;
+
+      // Recreate database fresh
+      final dir = await getApplicationDocumentsDirectory();
+      final path = '${dir.path}/solufacil.db';
+
+      _database = PowerSyncDatabase(
+        schema: schema,
+        path: path,
+      );
+    } else {
+      // Same user - just disconnect (keeps local data for delta sync)
+      print('[PowerSync] Same user - keeping cache for delta sync');
+      await _database!.disconnect();
+    }
+
+    // Save current user ID for next comparison
+    if (userId != null) {
+      await prefs.setString(_lastUserIdKey, userId);
+      print('[PowerSync] Saved user ID: $userId');
+    }
+
+    // Create new connector with fresh credentials
+    final connector = PowerSyncConnector(
+      storage: storage,
+      dio: dio,
+    );
+
+    // Connect - will do full sync if cleared, delta sync if not
+    _database!.connect(connector: connector);
+    print('[PowerSync] Connected with ${userChanged ? "FULL" : "DELTA"} sync');
+  }
+
+  /// Clear the stored last user ID (call this if you want to force full sync next time)
+  static Future<void> clearLastUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_lastUserIdKey);
+    print('[PowerSync] Cleared last user ID');
   }
 }

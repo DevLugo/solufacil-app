@@ -282,22 +282,28 @@ final dayStateProvider =
   return DayStateNotifier();
 });
 
-/// Routes provider
+/// Routes provider - refreshes when sync completes
 final routesProvider = FutureProvider<List<RouteModel>>((ref) async {
   final dbAsyncValue = ref.watch(powerSyncDatabaseProvider);
   final db = dbAsyncValue.valueOrNull;
   if (db == null) return [];
+
+  // Watch sync completion to refresh routes after sync
+  final syncCount = ref.watch(syncCompletedNotifierProvider);
+  debugPrint('[routesProvider] Refreshing routes (syncCount: $syncCount)');
 
   try {
     final result = await db.execute('''
       SELECT id, name FROM Route ORDER BY name
     ''');
 
+    debugPrint('[routesProvider] Found ${result.length} routes');
     return result.map((row) => RouteModel(
           id: row['id'] as String,
           name: row['name'] as String,
         )).toList();
   } catch (e) {
+    debugPrint('[routesProvider] Error: $e');
     return [];
   }
 });
@@ -310,6 +316,7 @@ final selectedLeadProvider = StateProvider<LeadModel?>((ref) => null);
 
 /// Leads by route provider - gets all leads (localidades) for a given route
 /// Uses _RouteEmployees join table for route-employee relationships
+/// Refreshes when sync completes
 final leadsByRouteProvider = FutureProvider.family<List<LeadModel>, String>((ref, routeId) async {
   final dbAsyncValue = ref.watch(powerSyncDatabaseProvider);
   final db = dbAsyncValue.valueOrNull;
@@ -318,8 +325,11 @@ final leadsByRouteProvider = FutureProvider.family<List<LeadModel>, String>((ref
     return [];
   }
 
+  // Watch sync completion to refresh leads after sync
+  final syncCount = ref.watch(syncCompletedNotifierProvider);
+
   try {
-    debugPrint('[leadsByRouteProvider] Querying leads for route: $routeId');
+    debugPrint('[leadsByRouteProvider] Querying leads for route: $routeId (syncCount: $syncCount)');
 
     // Debug: Check _RouteEmployees for this route
     final routeEmployees = await db.execute(

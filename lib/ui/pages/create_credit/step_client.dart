@@ -32,6 +32,7 @@ class _StepClientState extends ConsumerState<StepClient> {
   final _streetController = TextEditingController();
   final _searchFocusNode = FocusNode();
   bool _showNewClientForm = false;
+  bool _isScanning = false;
   final _currencyFormat = NumberFormat.currency(locale: 'es_MX', symbol: '\$', decimalDigits: 0);
 
   @override
@@ -72,13 +73,19 @@ class _StepClientState extends ConsumerState<StepClient> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Busca un cliente existente o crea uno nuevo',
+                  'Identifica con huella o busca manualmente',
                   style: TextStyle(
                     fontSize: 14,
                     color: AppColors.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 24),
+
+                // Fingerprint identification option (for renewals - quick flow)
+                if (widget.state.selectedClient == null) ...[
+                  _buildFingerprintIdentificationCard(),
+                  const SizedBox(height: 16),
+                ],
 
                 // Selected client card
                 if (widget.state.selectedClient != null && !_showNewClientForm) ...[
@@ -349,6 +356,145 @@ class _StepClientState extends ConsumerState<StepClient> {
         ],
       ),
     );
+  }
+
+  /// Fingerprint identification card - primary option for quick renewal flow
+  Widget _buildFingerprintIdentificationCard() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.primary,
+            AppColors.primary.withOpacity(0.85),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _isScanning ? null : _showFingerprintScanner,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                // Fingerprint icon with animation
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: _isScanning
+                      ? const Center(
+                          child: SizedBox(
+                            width: 32,
+                            height: 32,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 3,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          ),
+                        )
+                      : const Icon(
+                          LucideIcons.fingerprint,
+                          size: 36,
+                          color: Colors.white,
+                        ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text(
+                            'Identificar con Huella',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Text(
+                              'Rápido',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _isScanning
+                            ? 'Escaneando huella...'
+                            : 'Toca para identificar cliente automáticamente',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white.withOpacity(0.85),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  LucideIcons.chevronRight,
+                  color: Colors.white.withOpacity(0.7),
+                  size: 24,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Show fingerprint scanner bottom sheet
+  Future<void> _showFingerprintScanner() async {
+    setState(() => _isScanning = true);
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _FingerprintScannerSheet(
+        onCancel: () {
+          Navigator.pop(context);
+        },
+        onClientIdentified: (client) {
+          Navigator.pop(context);
+          // In a real implementation, this would select the identified client
+          // widget.notifier.selectClient(client);
+        },
+      ),
+    );
+
+    if (mounted) {
+      setState(() => _isScanning = false);
+    }
   }
 
   Widget _buildSearchField(ClientSearchState searchState, ClientSearchConfig config) {
@@ -905,3 +1051,289 @@ class _ClientResultTile extends StatelessWidget {
     );
   }
 }
+
+/// Fingerprint scanner bottom sheet for client identification
+class _FingerprintScannerSheet extends StatefulWidget {
+  final VoidCallback onCancel;
+  final Function(ClientForLoan) onClientIdentified;
+
+  const _FingerprintScannerSheet({
+    required this.onCancel,
+    required this.onClientIdentified,
+  });
+
+  @override
+  State<_FingerprintScannerSheet> createState() => _FingerprintScannerSheetState();
+}
+
+class _FingerprintScannerSheetState extends State<_FingerprintScannerSheet>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _pulseAnimation;
+  _ScanState _scanState = _ScanState.ready;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.15).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _startScanning() async {
+    setState(() => _scanState = _ScanState.scanning);
+
+    // Simulate scanning delay
+    await Future.delayed(const Duration(seconds: 2));
+
+    if (!mounted) return;
+
+    // For mockup, always show "not found" since we don't have SDK
+    setState(() => _scanState = _ScanState.notFound);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  // Title
+                  const Text(
+                    'Identificación por Huella',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _getSubtitle(),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Fingerprint scanner area
+                  GestureDetector(
+                    onTap: _scanState == _ScanState.ready ? _startScanning : null,
+                    child: AnimatedBuilder(
+                      animation: _pulseAnimation,
+                      builder: (context, child) {
+                        return Transform.scale(
+                          scale: _scanState == _ScanState.scanning
+                              ? _pulseAnimation.value
+                              : 1.0,
+                          child: Container(
+                            width: 160,
+                            height: 160,
+                            decoration: BoxDecoration(
+                              color: _getScannerColor().withOpacity(0.1),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: _getScannerColor().withOpacity(0.3),
+                                width: 3,
+                              ),
+                            ),
+                            child: Container(
+                              margin: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: _getScannerColor().withOpacity(0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                _getIcon(),
+                                size: 72,
+                                color: _getScannerColor(),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Status text
+                  Text(
+                    _getStatusText(),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: _getScannerColor(),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+
+                  // Not found info
+                  if (_scanState == _ScanState.notFound) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.warningSurfaceLight,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(LucideIcons.info, size: 20, color: AppColors.warningDark),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'El SDK de huellas no está configurado.\nBusca al cliente manualmente.',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: AppColors.warningDark,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 24),
+
+                  // Action buttons
+                  if (_scanState == _ScanState.ready) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _startScanning,
+                        icon: const Icon(LucideIcons.fingerprint),
+                        label: const Text('Iniciar Escaneo'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ] else if (_scanState == _ScanState.notFound) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: widget.onCancel,
+                        icon: const Icon(LucideIcons.search),
+                        label: const Text('Buscar Manualmente'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: () {
+                        setState(() => _scanState = _ScanState.ready);
+                      },
+                      child: const Text('Reintentar'),
+                    ),
+                  ],
+
+                  if (_scanState != _ScanState.scanning) ...[
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: widget.onCancel,
+                      child: Text(
+                        'Cancelar',
+                        style: TextStyle(color: AppColors.textMuted),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getSubtitle() {
+    switch (_scanState) {
+      case _ScanState.ready:
+        return 'Coloca el dedo del cliente en el sensor para identificarlo automáticamente';
+      case _ScanState.scanning:
+        return 'Mantenga el dedo quieto mientras se escanea...';
+      case _ScanState.notFound:
+        return 'No se pudo identificar la huella';
+    }
+  }
+
+  String _getStatusText() {
+    switch (_scanState) {
+      case _ScanState.ready:
+        return 'Toca para escanear';
+      case _ScanState.scanning:
+        return 'Escaneando...';
+      case _ScanState.notFound:
+        return 'Cliente no encontrado';
+    }
+  }
+
+  IconData _getIcon() {
+    switch (_scanState) {
+      case _ScanState.ready:
+      case _ScanState.scanning:
+        return LucideIcons.fingerprint;
+      case _ScanState.notFound:
+        return LucideIcons.userX;
+    }
+  }
+
+  Color _getScannerColor() {
+    switch (_scanState) {
+      case _ScanState.ready:
+        return AppColors.primary;
+      case _ScanState.scanning:
+        return AppColors.info;
+      case _ScanState.notFound:
+        return AppColors.warning;
+    }
+  }
+}
+
+enum _ScanState { ready, scanning, notFound }

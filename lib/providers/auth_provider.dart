@@ -112,7 +112,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
 
       // Reconnect PowerSync with new credentials
-      await PowerSyncManager.reconnect(storage: _storage, dio: _dio);
+      // Pass userId to detect if different user logged in (triggers full sync if so)
+      await PowerSyncManager.reconnect(
+        storage: _storage,
+        dio: _dio,
+        userId: response.user.id,
+      );
 
       return true;
     } on AuthException catch (e) {
